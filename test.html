@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixiJS Test</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 20px; 
+            background: #222; 
+            color: white; 
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>PixiJS 基本テスト</h1>
+    <div id="gameContainer"></div>
+    <div id="status"></div>
+    
+    <script type="module">
+        try {
+            console.log('PixiJS テスト開始');
+            
+            // PixiJSをインポート
+            const PIXI = await import('pixi.js');
+            console.log('PixiJS version:', PIXI.VERSION);
+            
+            // ゲームコンテナを取得
+            const gameContainer = document.getElementById('gameContainer');
+            const status = document.getElementById('status');
+            
+            status.innerHTML = 'PixiJS読み込み完了<br>';
+            
+            // PixiJSアプリケーションを作成
+            const app = new PIXI.Application({
+                width: 800,
+                height: 600,
+                backgroundColor: 0x1099bb,
+                antialias: true
+            });
+            
+            status.innerHTML += 'PixiJSアプリケーション作成完了<br>';
+            
+            // キャンバスをDOMに追加
+            gameContainer.appendChild(app.view);
+            
+            status.innerHTML += 'キャンバスをDOMに追加完了<br>';
+            
+            // 簡単なテキストを追加
+            const text = new PIXI.Text('Hello PixiJS!', {
+                fontFamily: 'Arial',
+                fontSize: 36,
+                fill: 0xffffff,
+                align: 'center'
+            });
+            
+            text.anchor.set(0.5);
+            text.x = 400;
+            text.y = 300;
+            
+            app.stage.addChild(text);
+            
+            status.innerHTML += 'テキスト追加完了<br>';
+            status.innerHTML += '<strong>テスト成功！</strong>';
+            
+        } catch (error) {
+            console.error('テストエラー:', error);
+            document.getElementById('status').innerHTML = `<div style="color: red;">エラー: ${error.message}</div>`;
+        }
+    </script>
+</body>
+</html>

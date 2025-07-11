@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPG Debug</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 20px; 
+            background: #222; 
+            color: white; 
+            font-family: monospace;
+        }
+        #gameContainer { 
+            border: 2px solid #444; 
+            margin: 20px 0; 
+        }
+        #console { 
+            background: #000; 
+            color: #0f0; 
+            padding: 10px; 
+            height: 200px; 
+            overflow-y: auto; 
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>女神転生風RPG - Debug版</h1>
+    <div id="gameContainer"></div>
+    <div>
+        <h3>デバッグコンソール:</h3>
+        <div id="console"></div>
+    </div>
+    
+    <script type="module">
+        // コンソールログをページに表示
+        const consoleDiv = document.getElementById('console');
+        const originalLog = console.log;
+        const originalError = console.error;
+        
+        console.log = function(...args) {
+            consoleDiv.innerHTML += `<div>[LOG] ${args.join(' ')}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            originalLog.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            consoleDiv.innerHTML += `<div style="color: #f44;">[ERROR] ${args.join(' ')}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            originalError.apply(console, args);
+        };
+        
+        // ゲーム開始
+        import('./src/debug.js').catch(error => {
+            console.error('ゲームの読み込みに失敗:', error);
+        });
+    </script>
+</body>
+</html>
