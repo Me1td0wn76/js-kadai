@@ -24,6 +24,9 @@ export class WorldMapScene extends BaseScene {
         this.imageLoader = new ImageLoader();
         await this.imageLoader.loadAllAssets();
         
+        // デバッグ用：テクスチャサイズを表示
+        this.imageLoader.logAllTextureSizes();
+        
         // 背景とワールドマップを作成
         await this.createWorldMap();
         
@@ -46,114 +49,49 @@ export class WorldMapScene extends BaseScene {
         // 世界地図の背景
         this.worldMap = new PIXI.Container();
         
-        // 背景画像を使用（haikei.png）
-        const backgroundTexture = this.imageLoader.getTexture('background');
-        if (backgroundTexture) {
-            const backgroundSprite = new PIXI.Sprite(backgroundTexture);
-            // 画像をマップサイズにスケール
-            backgroundSprite.width = 1600;
-            backgroundSprite.height = 1200;
-            this.worldMap.addChild(backgroundSprite);
-        } else {
-            // フォールバック：草原のベース
-            const grassBackground = new PIXI.Graphics();
-            grassBackground.rect(0, 0, 1600, 1200);
-            grassBackground.fill(0x4a7c59);
-            this.worldMap.addChild(grassBackground);
-        }
+        // シンプルな草原色の背景
+        const grassBackground = new PIXI.Graphics();
+        grassBackground.rect(0, 0, 1600, 1200);
+        grassBackground.fill(0x4a7c59); // 草原の緑色
+        this.worldMap.addChild(grassBackground);
         
-        // 道路を描画
-        this.createRoads();
+        // マップタイル（添付された緑のブロック画像）を配置
+        this.createMapTiles();
         
-        // 森林地帯
-        this.createForests();
-        
-        // 山岳地帯
-        this.createMountains();
-        
-        // 水辺
-        this.createWaterBodies();
+        // 簡単な装飾要素のみ追加
+        this.createSimpleDecorations();
         
         this.container.addChild(this.worldMap);
     }
     
-    createRoads() {
-        const roads = new PIXI.Graphics();
-        roads.stroke({ width: 8, color: 0x8b7355 });
+    createSimpleDecorations() {
+        // 少数の装飾的な要素のみ配置
         
-        // メイン道路
-        roads.moveTo(100, 600);
-        roads.lineTo(800, 600);
-        roads.lineTo(800, 300);
-        roads.lineTo(1200, 300);
+        // 道を表現する簡単なライン
+        const road = new PIXI.Graphics();
+        road.stroke({ width: 6, color: 0x8b7355 });
+        road.moveTo(100, 600);
+        road.lineTo(800, 600);
+        road.lineTo(800, 300);
+        road.lineTo(1200, 300);
+        this.worldMap.addChild(road);
         
-        // 支線道路
-        roads.moveTo(400, 600);
-        roads.lineTo(400, 900);
-        roads.moveTo(800, 600);
-        roads.lineTo(1000, 800);
-        
-        this.worldMap.addChild(roads);
-    }
-    
-    createForests() {
+        // 森を表現する簡単な円（少数）
         const forests = new PIXI.Graphics();
-        
-        // 森林エリア
-        for (let i = 0; i < 15; i++) {
-            const x = 200 + Math.random() * 300;
-            const y = 100 + Math.random() * 200;
-            const radius = 30 + Math.random() * 20;
-            forests.circle(x, y, radius);
-        }
-        
-        // 別の森林エリア
-        for (let i = 0; i < 10; i++) {
-            const x = 1000 + Math.random() * 200;
-            const y = 500 + Math.random() * 300;
-            const radius = 25 + Math.random() * 15;
-            forests.circle(x, y, radius);
-        }
-        
         forests.fill(0x2d5016);
+        
+        // 3つの森エリア
+        const forestAreas = [
+            { x: 250, y: 150, radius: 60 },
+            { x: 1050, y: 600, radius: 50 },
+            { x: 150, y: 800, radius: 40 }
+        ];
+        
+        forestAreas.forEach(forest => {
+            forests.circle(forest.x, forest.y, forest.radius);
+        });
+        
         this.worldMap.addChild(forests);
-    }
-    
-    createMountains() {
-        const mountains = new PIXI.Graphics();
-        
-        // 山脈
-        for (let i = 0; i < 8; i++) {
-            const x = 1200 + i * 60;
-            const y = 150 + Math.random() * 100;
-            
-            // 三角形の山
-            mountains.moveTo(x, y + 80);
-            mountains.lineTo(x + 30, y);
-            mountains.lineTo(x + 60, y + 80);
-            mountains.closePath();
-        }
-        
-        mountains.fill(0x5d4037);
-        this.worldMap.addChild(mountains);
-    }
-    
-    createWaterBodies() {
-        const water = new PIXI.Graphics();
-        
-        // 湖
-        water.ellipse(600, 200, 80, 50);
-        water.fill(0x1565c0);
-        
-        // 川
-        for (let i = 0; i < 20; i++) {
-            const x = 500 + i * 30;
-            const y = 950 + Math.sin(i * 0.5) * 20;
-            water.circle(x, y, 15);
-        }
-        water.fill(0x1976d2);
-        
-        this.worldMap.addChild(water);
     }
     
     createPlayer() {
@@ -181,63 +119,157 @@ export class WorldMapScene extends BaseScene {
     }
     
     createAreas() {
-        // ダンジョンエリアを配置
-        const areaData = [
-            { x: 300, y: 300, name: "古い遺跡", type: "dungeon", color: 0x795548 },
-            { x: 700, y: 150, name: "魔の森", type: "dungeon", color: 0x2e7d32 },
-            { x: 1100, y: 400, name: "火山洞窟", type: "dungeon", color: 0xd84315 },
-            { x: 500, y: 800, name: "水の神殿", type: "dungeon", color: 0x1565c0 },
-            { x: 200, y: 700, name: "街", type: "town", color: 0xffa726 }
+        // ダンジョンエリアアイコンを画像で作成
+        const areas = [
+            {
+                name: '古の遺跡',
+                x: 400,
+                y: 500,
+                dungeonName: '古の遺跡',
+                difficulty: 1,
+                iconType: 'stairs'
+            },
+            {
+                name: '溶岩洞窟',
+                x: 800,
+                y: 300,
+                dungeonName: '溶岩洞窟',
+                difficulty: 2,
+                iconType: 'lava'
+            },
+            {
+                name: '闇の神殿',
+                x: 1200,
+                y: 600,
+                dungeonName: '闇の神殿',
+                difficulty: 3,
+                iconType: 'grave'
+            },
+            {
+                name: '魔法の塔',
+                x: 600,
+                y: 200,
+                dungeonName: '魔法の塔',
+                difficulty: 2,
+                iconType: 'house'
+            }
         ];
         
-        areaData.forEach(area => {
-            const areaSprite = new PIXI.Graphics();
+        areas.forEach(areaData => {
+            this.createAreaIcon(areaData);
+        });
+        
+        // 宝箱やアイテムも配置
+        this.createTreasureChests();
+    }
+
+    createAreaIcon(areaData) {
+        let areaIcon;
+        
+        // 画像アイコンを使用
+        let iconTexture = null;
+        switch (areaData.iconType) {
+            case 'stairs':
+                iconTexture = this.imageLoader.getTexture('tile_stairs');
+                break;
+            case 'lava':
+                iconTexture = this.imageLoader.getTexture('tile_lava');
+                break;
+            case 'grave':
+                iconTexture = this.imageLoader.getTexture('tile_grave');
+                break;
+            case 'house':
+                iconTexture = this.imageLoader.getTexture('tile_house');
+                break;
+        }
+        
+        if (iconTexture) {
+            areaIcon = new PIXI.Sprite(iconTexture);
+            areaIcon.width = 80;
+            areaIcon.height = 80;
+            areaIcon.anchor.set(0.5);
+        } else {
+            // フォールバック
+            areaIcon = new PIXI.Graphics();
+            const colors = {
+                stairs: 0x808080,
+                lava: 0xff4500,
+                grave: 0x2f4f4f,
+                house: 0x8b4513
+            };
+            areaIcon.rect(-40, -40, 80, 80);
+            areaIcon.fill(colors[areaData.iconType] || 0x808080);
+        }
+        
+        areaIcon.x = areaData.x;
+        areaIcon.y = areaData.y;
+        areaIcon.interactive = true;
+        areaIcon.buttonMode = true;
+        
+        // エリア名ラベル
+        const label = new PIXI.Text(areaData.name, {
+            fontFamily: 'Arial',
+            fontSize: 16,
+            fill: 0xffffff,
+            align: 'center'
+        });
+        label.anchor.set(0.5);
+        label.x = areaData.x;
+        label.y = areaData.y + 50;
+        
+        // アニメーション
+        gsap.to(areaIcon, {
+            y: areaIcon.y - 10,
+            duration: 2,
+            ease: "power2.inOut",
+            yoyo: true,
+            repeat: -1
+        });
+        
+        areaIcon.userData = areaData;
+        
+        this.worldMap.addChild(areaIcon);
+        this.worldMap.addChild(label);
+        this.areas.push(areaIcon);
+    }
+
+    createTreasureChests() {
+        const treasurePositions = [
+            { x: 300, y: 400 },
+            { x: 900, y: 500 },
+            { x: 1100, y: 200 },
+            { x: 500, y: 800 }
+        ];
+        
+        treasurePositions.forEach(pos => {
+            const treasureTexture = this.imageLoader.getTexture('treasure_chest');
+            let treasure;
             
-            if (area.type === "dungeon") {
-                // ダンジョンのアイコン
-                areaSprite.rect(-15, -15, 30, 30);
-                areaSprite.fill(area.color);
-                
-                areaSprite.rect(-10, -10, 20, 20);
-                areaSprite.fill(0x000000);
-            } else if (area.type === "town") {
-                // 街のアイコン
-                areaSprite.circle(0, 0, 20);
-                areaSprite.fill(area.color);
-                
-                areaSprite.circle(0, 0, 15);
-                areaSprite.fill(0xffffff);
+            if (treasureTexture) {
+                treasure = new PIXI.Sprite(treasureTexture);
+                treasure.anchor.set(0.5);
+                treasure.scale.set(0.3); // 宝箱のサイズを小さく（0.8から0.3に）
+            } else {
+                // フォールバック
+                treasure = new PIXI.Graphics();
+                treasure.rect(-10, -8, 20, 15); // フォールバックサイズも小さく
+                treasure.fill(0xffd700);
             }
             
-            areaSprite.x = area.x;
-            areaSprite.y = area.y;
-            areaSprite.interactive = true;
-            areaSprite.buttonMode = true;
+            treasure.x = pos.x;
+            treasure.y = pos.y;
+            treasure.interactive = true;
             
-            // エリア情報を保存
-            areaSprite.areaData = area;
-            
-            // ホバー効果
-            areaSprite.on('pointerover', () => {
-                gsap.to(areaSprite.scale, {
-                    x: 1.2,
-                    y: 1.2,
-                    duration: 0.2,
-                    ease: "back.out(1.7)"
-                });
+            // キラキラエフェクト
+            gsap.to(treasure, {
+                alpha: 0.7,
+                duration: 1,
+                ease: "power2.inOut",
+                yoyo: true,
+                repeat: -1
             });
             
-            areaSprite.on('pointerout', () => {
-                gsap.to(areaSprite.scale, {
-                    x: 1,
-                    y: 1,
-                    duration: 0.2,
-                    ease: "back.out(1.7)"
-                });
-            });
-            
-            this.worldMap.addChild(areaSprite);
-            this.areas.push(areaSprite);
+            this.worldMap.addChild(treasure);
         });
     }
     
@@ -417,11 +449,106 @@ export class WorldMapScene extends BaseScene {
     triggerRandomEncounter() {
         console.log('ランダムエンカウント発生！');
         
+        // フィールドで出現する敵の種類を重み付きで選択（トロール以外を優先）
+        const fieldEnemies = [
+            { type: 'troll', name: 'トロール', level: 1, weight: 1 },
+            { type: 'skeleton', name: 'スケルトン', level: 2, weight: 4 },
+            { type: 'dragon_red', name: 'レッドドラゴン', level: 3, weight: 2 },
+            { type: 'dragon_blue', name: 'ブルードラゴン', level: 2, weight: 3 }
+        ];
+        
+        // 重み付きランダム選択
+        const totalWeight = fieldEnemies.reduce((sum, enemy) => sum + enemy.weight, 0);
+        let randomWeight = Math.random() * totalWeight;
+        let selectedEnemy = fieldEnemies[0]; // デフォルト
+        
+        for (const enemy of fieldEnemies) {
+            randomWeight -= enemy.weight;
+            if (randomWeight <= 0) {
+                selectedEnemy = enemy;
+                break;
+            }
+        }
+        
         // 戦闘シーンに切り替え
         this.switchTo('battle', {
-            enemyType: 'random',
+            enemy: {
+                name: selectedEnemy.name,
+                level: selectedEnemy.level + Math.floor(Math.random() * 2),
+                enemyType: selectedEnemy.type
+            },
             battleBackground: 'field'
         });
+    }
+    
+    createMapTiles() {
+        const tileSize = 64;
+        const mapWidth = 25;
+        const mapHeight = 19;
+        
+        // 基本的に草原タイル（添付された緑のブロック画像）を使用
+        const grassTexture = this.imageLoader.getTexture('tile_grass');
+        
+        // まず全体を草原タイルで埋める
+        for (let y = 0; y < mapHeight; y++) {
+            for (let x = 0; x < mapWidth; x++) {
+                this.createBaseTile(x * tileSize, y * tileSize, grassTexture);
+            }
+        }
+        
+        // 少数の装飾タイルを配置（全体の10%程度）
+        const decorativeTiles = ['house', 'stairs', 'stone'];
+        const decorationCount = Math.floor((mapWidth * mapHeight) * 0.1);
+        
+        for (let i = 0; i < decorationCount; i++) {
+            const x = Math.floor(Math.random() * mapWidth) * tileSize;
+            const y = Math.floor(Math.random() * mapHeight) * tileSize;
+            const tileType = decorativeTiles[Math.floor(Math.random() * decorativeTiles.length)];
+            this.createDecorationTile(x, y, tileType);
+        }
+    }
+
+    createBaseTile(x, y, texture) {
+        if (texture) {
+            const tile = new PIXI.Sprite(texture);
+            tile.x = x;
+            tile.y = y;
+            tile.width = 64;
+            tile.height = 64;
+            this.worldMap.addChild(tile);
+        } else {
+            // フォールバック：草原色の四角形
+            const fallbackTile = new PIXI.Graphics();
+            fallbackTile.rect(x, y, 64, 64);
+            fallbackTile.fill(0x4a7c59); // 草原色
+            this.worldMap.addChild(fallbackTile);
+        }
+    }
+
+    createDecorationTile(x, y, tileType) {
+        let texture = null;
+        
+        switch (tileType) {
+            case 'house':
+                texture = this.imageLoader.getTexture('tile_house');
+                break;
+            case 'stairs':
+                texture = this.imageLoader.getTexture('tile_stairs');
+                break;
+            case 'stone':
+                texture = this.imageLoader.getTexture('tile_stone');
+                break;
+        }
+        
+        if (texture) {
+            const tile = new PIXI.Sprite(texture);
+            tile.x = x;
+            tile.y = y;
+            tile.width = 64;
+            tile.height = 64;
+            tile.alpha = 0.9; // 少し透明にして背景と馴染ませる
+            this.worldMap.addChild(tile);
+        }
     }
     
     destroy() {

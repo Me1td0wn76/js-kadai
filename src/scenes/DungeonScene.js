@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { gsap } from 'gsap';
 import { BaseScene } from './SceneManager.js';
+import { ImageLoader } from '../assets/ImageLoader.js';
+import { ScrollDiscovery } from '../ui/ScrollDiscovery.js';
+import { PlayerInventory } from '../data/PlayerInventory.js';
 
 export class DungeonScene extends BaseScene {
     constructor(sceneManager, transitionData = {}) {
@@ -20,16 +23,24 @@ export class DungeonScene extends BaseScene {
         this.cellSize = 2;
         this.enemies = [];
         this.treasures = [];
+        this.scrolls = []; // スクロール配置
         this.raycaster = new THREE.Raycaster();
         this.isMoving = false;
         this.moveSpeed = 0.5;
         this.encounterRate = 0.1;
         this.dungeonName = transitionData.dungeonName || "未知のダンジョン";
+        this.imageLoader = null;
+        this.playerInventory = null;
+        this.scrollDiscovery = null;
     }
     
     async init() {
         // DungeonSceneはThree.jsを使用するため、PIXIコンテナは作成しない
         // 代わりにDOMエレメントを直接管理
+        
+        // ImageLoaderを初期化
+        this.imageLoader = new ImageLoader();
+        await this.imageLoader.loadAllAssets();
         
         // Three.jsシーンを初期化
         this.initThreeJS();
@@ -43,14 +54,13 @@ export class DungeonScene extends BaseScene {
         // 敵とアイテムを配置
         this.placeEnemiesAndTreasures();
         
-        // プレイヤーの初期位置を設定
-        this.setupPlayer();
+        // スクロールを配置
+        this.placeScrolls();
         
-        // UI要素を作成
-        this.createUI();
-        
-        // ライティングを設定
-        this.setupLighting();
+        // プレイヤーインベントリとスクロール発見システムを初期化
+        this.playerInventory = new PlayerInventory();
+        this.scrollDiscovery = new ScrollDiscovery(this.sceneManager, this.playerInventory);
+        this.scrollDiscovery.init();
         
         // 戦闘から戻ってきた場合の処理
         if (this.transitionData && (this.transitionData.victory || this.transitionData.escaped)) {
@@ -200,11 +210,24 @@ export class DungeonScene extends BaseScene {
             }
         }
         
-        // 敵を配置
-        const enemyCount = Math.floor(passagePositions.length * 0.1);
+        // 敵を配置（出現率を大幅に減少）
+        const enemyCount = Math.floor(passagePositions.length * 0.03); // 10%から3%に減少
+        const usedPositions = new Set();
+        
         for (let i = 0; i < enemyCount; i++) {
-            const pos = passagePositions[Math.floor(Math.random() * passagePositions.length)];
-            this.createEnemy(pos.x, pos.y);
+            let attempts = 0;
+            let pos;
+            
+            // 重複しない位置を探す
+            do {
+                pos = passagePositions[Math.floor(Math.random() * passagePositions.length)];
+                attempts++;
+            } while (usedPositions.has(`${pos.x},${pos.y}`) && attempts < 50);
+            
+            if (attempts < 50) {
+                usedPositions.add(`${pos.x},${pos.y}`);
+                this.createEnemy(pos.x, pos.y);
+            }
         }
         
         // 宝箱を配置
@@ -212,6 +235,13 @@ export class DungeonScene extends BaseScene {
         for (let i = 0; i < treasureCount; i++) {
             const pos = passagePositions[Math.floor(Math.random() * passagePositions.length)];
             this.createTreasure(pos.x, pos.y);
+        }
+        
+        // スクロールを配置
+        const scrollCount = Math.floor(passagePositions.length * 0.02); // 5%の確率で配置
+        for (let i = 0; i < scrollCount; i++) {
+            const pos = passagePositions[Math.floor(Math.random() * passagePositions.length)];
+            this.createScroll(pos.x, pos.y);
         }
     }
     
@@ -228,45 +258,124 @@ export class DungeonScene extends BaseScene {
             return;
         }
         
-        // 敵の3Dモデル（簡易版）
-        const enemyGeometry = new THREE.SphereGeometry(0.3, 8, 6);
-        const enemyMaterial = new THREE.MeshLambertMaterial({ color: 0xff4444 });
+        // 敵の種類を重み付きランダムで選択（トロールの出現率を下げる）
+        const enemyTypes = [
+            { type: 'troll', name: 'トロール', color: 0xff4444, baseLevel: 1, weight: 1 }, // 重み1（低い）
+            { type: 'skeleton', name: 'スケルトン', color: 0xcccccc, baseLevel: 2, weight: 3 }, // 重み3
+            { type: 'dragon_red', name: 'レッドドラゴン', color: 0xff0000, baseLevel: 4, weight: 2 }, // 重み2
+            { type: 'dragon_blue', name: 'ブルードラゴン', color: 0x0066ff, baseLevel: 3, weight: 2 }, // 重み2
+            { type: 'dark_angel', name: 'ダークエンジェル', color: 0x663399, baseLevel: 5, weight: 2 }, // 重み2
+            { type: 'dark_mage', name: 'ダークメイジ', color: 0x330066, baseLevel: 3, weight: 3 } // 重み3
+        ];
+        
+        // 重み付きランダム選択
+        const totalWeight = enemyTypes.reduce((sum, enemy) => sum + enemy.weight, 0);
+        let randomWeight = Math.random() * totalWeight;
+        let selectedEnemy = enemyTypes[0]; // デフォルト
+        
+        for (const enemy of enemyTypes) {
+            randomWeight -= enemy.weight;
+            if (randomWeight <= 0) {
+                selectedEnemy = enemy;
+                break;
+            }
+        }
+        
+        const enemyTemplate = selectedEnemy;
+        
+        // 敵の3Dモデル（画像テクスチャベース）
+        const enemyGeometry = new THREE.PlaneGeometry(0.4, 0.6); // サイズを小さく（0.8x1.2から0.4x0.6に）
+        
+        // 画像テクスチャを使用
+        let enemyMaterial;
+        if (this.imageLoader && this.imageLoader.isLoaded) {
+            const texture = this.getEnemyTexture(enemyTemplate.type);
+            if (texture) {
+                // PixiJSテクスチャをThree.jsで使用するために変換
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = texture.width;
+                canvas.height = texture.height;
+                
+                // テクスチャを描画
+                const img = texture.source.resource;
+                ctx.drawImage(img, 0, 0);
+                
+                const threeTexture = new THREE.CanvasTexture(canvas);
+                enemyMaterial = new THREE.MeshLambertMaterial({ 
+                    map: threeTexture,
+                    transparent: true
+                });
+            } else {
+                enemyMaterial = new THREE.MeshLambertMaterial({ color: enemyTemplate.color });
+            }
+        } else {
+            enemyMaterial = new THREE.MeshLambertMaterial({ color: enemyTemplate.color });
+        }
+        
         const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
-        enemy.position.set(worldX, 0.5, worldZ);
-        enemy.castShadow = true;
+        enemy.position.set(worldX, 1.0, worldZ); // 少し高い位置に配置
+        enemy.lookAt(0, 1.0, 0); // プレイヤーの方向を向く
         
         // 敵データを追加
         enemy.userData = {
             type: 'enemy',
             id: enemyId,
-            name: 'ダンジョンモンスター',
-            level: 1 + Math.floor(Math.random() * 3),
-            hp: 20 + Math.floor(Math.random() * 15), // 20-35 HP
-            attack: 8 + Math.floor(Math.random() * 5), // 8-12 攻撃力
-            defense: 3 + Math.floor(Math.random() * 3), // 3-5 防御力
-            exp: 15 + Math.floor(Math.random() * 10), // 15-25 経験値
+            enemyType: enemyTemplate.type,
+            name: enemyTemplate.name,
+            level: enemyTemplate.baseLevel + Math.floor(Math.random() * 3),
+            hp: 20 + enemyTemplate.baseLevel * 10 + Math.floor(Math.random() * 15),
+            attack: 8 + enemyTemplate.baseLevel * 3 + Math.floor(Math.random() * 5),
+            defense: 3 + enemyTemplate.baseLevel * 2 + Math.floor(Math.random() * 3),
+            exp: 15 + enemyTemplate.baseLevel * 5 + Math.floor(Math.random() * 10),
             mazeX, mazeY
         };
         
-        // 浮遊アニメーション
+        // 浮遊アニメーション（より動的に）
         gsap.to(enemy.position, {
-            y: 0.8,
-            duration: 2,
+            y: 1.3,
+            duration: 1.5 + Math.random(),
             ease: "power2.inOut",
             yoyo: true,
             repeat: -1
         });
         
-        // 回転アニメーション
+        // 回転アニメーション（敵の種類により異なる）
+        const rotationSpeed = 2 + Math.random() * 2;
         gsap.to(enemy.rotation, {
             y: Math.PI * 2,
-            duration: 4,
+            duration: rotationSpeed,
             ease: "none",
             repeat: -1
         });
         
         this.scene.add(enemy);
         this.enemies.push(enemy);
+        
+        console.log(`敵 ${enemyTemplate.name} (Lv.${enemy.userData.level}) を生成しました`);
+    }
+
+    getEnemyTexture(enemyType) {
+        if (!this.imageLoader || !this.imageLoader.isLoaded) {
+            return null;
+        }
+        
+        switch (enemyType) {
+            case 'troll':
+                return this.imageLoader.getTexture('troll');
+            case 'skeleton':
+                return this.imageLoader.getTexture('enemy_skeleton');
+            case 'dragon_red':
+                return this.imageLoader.getTexture('enemy_dragon_red');
+            case 'dragon_blue':
+                return this.imageLoader.getTexture('enemy_dragon_blue');
+            case 'dark_angel':
+                return this.imageLoader.getTexture('enemy_dark_angel');
+            case 'dark_mage':
+                return this.imageLoader.getTexture('enemy_dark_mage');
+            default:
+                return this.imageLoader.getTexture('troll');
+        }
     }
     
     createTreasure(mazeX, mazeY) {
@@ -297,6 +406,81 @@ export class DungeonScene extends BaseScene {
         
         this.scene.add(treasure);
         this.treasures.push(treasure);
+        
+        return treasure;
+    }
+    
+    placeScrolls() {
+        // ダンジョン内にスクロールを配置
+        const scrollCount = 1; // ダンジョンごとに1つのスクロール
+        
+        for (let i = 0; i < scrollCount; i++) {
+            // ランダムな場所を選択（空いている場所）
+            let attempts = 0;
+            let mazeX, mazeY;
+            
+            do {
+                mazeX = Math.floor(Math.random() * this.mazeWidth);
+                mazeY = Math.floor(Math.random() * this.mazeHeight);
+                attempts++;
+            } while (this.maze[mazeY][mazeX] === 1 && attempts < 100); // 壁ではない場所
+            
+            if (attempts >= 100) continue; // 配置できない場合はスキップ
+            
+            this.createScroll(mazeX, mazeY);
+        }
+    }
+    
+    createScroll(mazeX, mazeY) {
+        // スクロールの3Dモデルを作成
+        const scrollGeometry = new THREE.CylinderGeometry(0.2, 0.2, 0.6, 8);
+        const scrollMaterial = new THREE.MeshPhongMaterial({ 
+            color: 0xffd700,
+            shininess: 100
+        });
+        
+        const scrollMesh = new THREE.Mesh(scrollGeometry, scrollMaterial);
+        
+        // ワールド座標に変換
+        const worldX = (mazeX - this.mazeWidth / 2) * this.cellSize;
+        const worldZ = (mazeY - this.mazeHeight / 2) * this.cellSize;
+        
+        scrollMesh.position.set(worldX, 0.3, worldZ);
+        scrollMesh.rotation.z = Math.PI / 2; // 横向きに配置
+        
+        // ゆっくりと回転させる
+        gsap.to(scrollMesh.rotation, {
+            y: Math.PI * 2,
+            duration: 6,
+            repeat: -1,
+            ease: "none"
+        });
+        
+        // 上下に浮遊させる
+        gsap.to(scrollMesh.position, {
+            y: 0.6,
+            duration: 2,
+            yoyo: true,
+            repeat: -1,
+            ease: "power2.inOut"
+        });
+        
+        this.scene.add(scrollMesh);
+        
+        // スクロールデータを保存
+        const scrollLocation = ScrollDiscovery.getRandomScrollLocation();
+        const scroll = {
+            id: `scroll_${mazeX}_${mazeY}`,
+            mesh: scrollMesh,
+            position: { x: worldX, z: worldZ },
+            mazePosition: { x: mazeX, y: mazeY },
+            location: scrollLocation,
+            collected: false
+        };
+        
+        this.scrolls.push(scroll);
+        
+        return scroll;
     }
     
     setupPlayer() {
@@ -519,6 +703,15 @@ export class DungeonScene extends BaseScene {
                 this.collectTreasure(treasure);
             }
         });
+        
+        // スクロールとの衝突判定
+        this.scrolls.forEach(scroll => {
+            if (!scroll.collected &&
+                scroll.mazePosition.x === this.player.x && 
+                scroll.mazePosition.y === this.player.z) {
+                this.collectScroll(scroll);
+            }
+        });
     }
     
     checkForExit() {
@@ -540,7 +733,15 @@ export class DungeonScene extends BaseScene {
         
         // 戦闘シーンに切り替え
         this.switchTo('battle', {
-            enemy: enemy.userData,
+            enemy: {
+                name: enemy.userData.name,
+                level: enemy.userData.level,
+                hp: enemy.userData.hp,
+                attack: enemy.userData.attack,
+                defense: enemy.userData.defense,
+                exp: enemy.userData.exp,
+                enemyType: enemy.userData.enemyType // 敵の種類情報を追加
+            },
             enemyId: enemy.userData.id, // 敵の固有IDを追加
             battleBackground: 'dungeon',
             returnScene: 'dungeon',
@@ -570,6 +771,32 @@ export class DungeonScene extends BaseScene {
         
         // アイテム獲得処理（後で実装）
         // this.getGameData().inventory.push(newItem);
+    }
+    
+    discoverScroll(scroll) {
+        console.log('スクロールを発見！');
+        
+        scroll.userData.discovered = true;
+        
+        // スクロールを消す
+        gsap.to(scroll.scale, {
+            x: 0,
+            y: 0,
+            z: 0,
+            duration: 0.5,
+            ease: "back.in(1.7)",
+            onComplete: () => {
+                this.scene.remove(scroll);
+            }
+        });
+        
+        // プレイヤーのインベントリに追加
+        const gameData = this.getGameData();
+        if (!gameData.player.inventory) {
+            gameData.player.inventory = new PlayerInventory();
+        }
+        gameData.player.inventory.addItem('scroll', 1);
+        this.updateGameData(gameData);
     }
     
     triggerRandomEncounter() {
@@ -667,7 +894,83 @@ export class DungeonScene extends BaseScene {
         // オブジェクトを解放
         this.enemies = [];
         this.treasures = [];
+        this.scrolls = [];
         
         console.log('ダンジョンシーンが破棄されました');
+    }
+    
+    async collectScroll(scroll) {
+        if (scroll.collected) return;
+        
+        scroll.collected = true;
+        
+        // スクロール消失エフェクト
+        gsap.to(scroll.mesh.scale, {
+            x: 0, y: 0, z: 0,
+            duration: 0.5,
+            ease: "power2.in"
+        });
+        
+        gsap.to(scroll.mesh.rotation, {
+            y: scroll.mesh.rotation.y + Math.PI * 4,
+            duration: 0.5,
+            ease: "power2.in"
+        });
+        
+        // パーティクルエフェクト
+        this.createScrollCollectionEffect(scroll.position);
+        
+        // 0.5秒後にスクロールを削除
+        setTimeout(() => {
+            this.scene.remove(scroll.mesh);
+        }, 500);
+        
+        console.log(`スクロールを発見: ${scroll.location}`);
+        
+        // スクロール発見演出を表示
+        if (this.scrollDiscovery) {
+            await this.scrollDiscovery.discoverScroll(scroll.location);
+        }
+    }
+    
+    createScrollCollectionEffect(position) {
+        // 金色のパーティクル効果
+        const particleCount = 20;
+        const particles = [];
+        
+        for (let i = 0; i < particleCount; i++) {
+            const particleGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+            const particleMaterial = new THREE.MeshPhongMaterial({ 
+                color: 0xffd700,
+                transparent: true,
+                opacity: 0.8
+            });
+            
+            const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+            particle.position.set(
+                position.x + (Math.random() - 0.5) * 2,
+                0.5 + Math.random() * 2,
+                position.z + (Math.random() - 0.5) * 2
+            );
+            
+            this.scene.add(particle);
+            particles.push(particle);
+            
+            // パーティクルを上に飛ばして消す
+            gsap.to(particle.position, {
+                y: particle.position.y + 3,
+                duration: 1.5,
+                ease: "power2.out"
+            });
+            
+            gsap.to(particle.material, {
+                opacity: 0,
+                duration: 1.5,
+                ease: "power2.out",
+                onComplete: () => {
+                    this.scene.remove(particle);
+                }
+            });
+        }
     }
 }

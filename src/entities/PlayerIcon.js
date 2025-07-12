@@ -15,15 +15,28 @@ export class PlayerIcon {
     
     createPlayerSprite() {
         if (this.imageLoader && this.imageLoader.isLoaded) {
-            // 画像テクスチャを使用
-            const playerTexture = this.imageLoader.getTexture('player');
-            if (playerTexture) {
-                this.sprite = new PIXI.Sprite(playerTexture);
+            // 複数のプレイヤー画像から選択
+            const playerTextures = [
+                this.imageLoader.getTexture('player'),
+                this.imageLoader.getTexture('player_scientist'),
+                this.imageLoader.getTexture('player_warrior'),
+                this.imageLoader.getTexture('player_mage'),
+                this.imageLoader.getTexture('player_priest')
+            ];
+            
+            // 最初に利用可能なテクスチャを使用
+            const availableTexture = playerTextures.find(texture => texture !== undefined);
+            
+            if (availableTexture) {
+                this.sprite = new PIXI.Sprite(availableTexture);
                 this.sprite.anchor.set(0.5);
-                this.sprite.scale.set(1.5); // サイズ調整
                 
-                // アニメーションフレームを作成（human1.pngが歩行アニメーションを含む場合）
-                this.setupAnimationFrames();
+                // 画像サイズに基づいて適切なスケールを計算
+                const targetHeight = 40; // ワールドマップでの目標高さを少し小さく（48から40に）
+                const scale = targetHeight / availableTexture.height;
+                this.sprite.scale.set(scale);
+                
+                console.log(`プレイヤースプライト（画像）: 元サイズ ${availableTexture.width}x${availableTexture.height}, スケール ${scale.toFixed(2)}`);
             } else {
                 this.createFallbackSprite();
             }
@@ -185,7 +198,13 @@ export class PlayerIcon {
             if (playerTexture) {
                 const battleSprite = new PIXI.Sprite(playerTexture);
                 battleSprite.anchor.set(0.5);
-                battleSprite.scale.set(2.0); // 戦闘時は大きく表示
+                
+                // 画像サイズに基づいて適切なスケールを計算
+                const targetHeight = 80; // 戦闘画面での目標高さを敵と同じに（100から80に）
+                const scale = targetHeight / playerTexture.height;
+                battleSprite.scale.set(scale);
+                
+                console.log(`戦闘用プレイヤースプライト: 元サイズ ${playerTexture.width}x${playerTexture.height}, スケール ${scale.toFixed(2)}`);
                 return battleSprite;
             }
         }
@@ -193,8 +212,8 @@ export class PlayerIcon {
         // フォールバック用の描画バトルスプライト
         const battleGraphics = new PIXI.Graphics();
         
-        // より大きなサイズで描画
-        const scale = 1.5;
+        // より適切なサイズで描画
+        const scale = 0.8; // スケールを小さく（1.5から0.8に）
         
         // 体
         battleGraphics.roundRect(-15 * scale, -30 * scale, 30 * scale, 60 * scale, 8 * scale);

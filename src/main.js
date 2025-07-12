@@ -4,6 +4,10 @@ import { MenuScene } from './scenes/MenuScene.js'
 import { WorldMapScene } from './scenes/WorldMapScene.js'
 import { DungeonScene } from './scenes/DungeonScene.js'
 import { BattleScene } from './scenes/BattleScene.js'
+// アイテム・魔法システム
+import { ItemData } from './data/ItemData.js'
+import { SpellData } from './data/SpellData.js'
+import { PlayerInventory } from './data/PlayerInventory.js'
 
 document.querySelector('#app').innerHTML = `
   <div>
@@ -46,6 +50,9 @@ async function initGame() {
         sceneManager.registerScene('battle', BattleScene);
         
         console.log('シーン登録完了');
+        
+        // デバッグ用：敵データをリセット（敵の配置を更新するため）
+        sceneManager.resetEnemyData();
         
         // 初期シーンを開始（メニューから）
         await sceneManager.switchScene('menu');

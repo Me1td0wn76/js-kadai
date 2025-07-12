@@ -18,13 +18,46 @@ export class EnemyIcon {
     
     setupSprite() {
         if (this.imageLoader && this.imageLoader.isLoaded) {
-            // 敵のテクスチャを取得
-            const enemyTexture = this.imageLoader.getTexture('enemy');
+            let enemyTexture = null;
+            
+            // 敵タイプに応じた画像を選択
+            switch (this.enemyType) {
+                case 'troll':
+                case 'trool':
+                    enemyTexture = this.imageLoader.getTexture('troll');
+                    break;
+                case 'dragon_red':
+                    enemyTexture = this.imageLoader.getTexture('enemy_dragon_red');
+                    break;
+                case 'dragon_blue':
+                    enemyTexture = this.imageLoader.getTexture('enemy_dragon_blue');
+                    break;
+                case 'skeleton':
+                    enemyTexture = this.imageLoader.getTexture('enemy_skeleton');
+                    break;
+                case 'dark_angel':
+                    enemyTexture = this.imageLoader.getTexture('enemy_dark_angel');
+                    break;
+                case 'dark_mage':
+                    enemyTexture = this.imageLoader.getTexture('enemy_dark_mage');
+                    break;
+                default:
+                    // デフォルトはトロール
+                    enemyTexture = this.imageLoader.getTexture('troll');
+            }
+            
             if (enemyTexture) {
                 this.sprite = new PIXI.Sprite(enemyTexture);
                 this.sprite.anchor.set(0.5);
-                this.sprite.scale.set(0.8); // 敵は少し小さめ
+                
+                // 画像サイズに基づいて適切なスケールを計算
+                const targetHeight = 32; // ワールドマップでの目標高さ（ピクセル）
+                const scale = targetHeight / enemyTexture.height;
+                this.sprite.scale.set(scale);
+                
                 this.container.addChild(this.sprite);
+                
+                console.log(`敵スプライト（${this.enemyType}）: 元サイズ ${enemyTexture.width}x${enemyTexture.height}, スケール ${scale.toFixed(2)}`);
                 return;
             }
         }
@@ -225,18 +258,52 @@ export class EnemyIcon {
     // 戦闘用バトルスプライト
     createBattleSprite() {
         if (this.imageLoader && this.imageLoader.isLoaded) {
-            const enemyTexture = this.imageLoader.getTexture('enemy');
+            let enemyTexture = null;
+            
+            // 敵タイプに応じた画像を選択（setupSpriteと同じロジック）
+            switch (this.enemyType) {
+                case 'troll':
+                case 'trool':
+                    enemyTexture = this.imageLoader.getTexture('troll');
+                    break;
+                case 'dragon_red':
+                    enemyTexture = this.imageLoader.getTexture('enemy_dragon_red');
+                    break;
+                case 'dragon_blue':
+                    enemyTexture = this.imageLoader.getTexture('enemy_dragon_blue');
+                    break;
+                case 'skeleton':
+                    enemyTexture = this.imageLoader.getTexture('enemy_skeleton');
+                    break;
+                case 'dark_angel':
+                    enemyTexture = this.imageLoader.getTexture('enemy_dark_angel');
+                    break;
+                case 'dark_mage':
+                    enemyTexture = this.imageLoader.getTexture('enemy_dark_mage');
+                    break;
+                default:
+                    // デフォルトはトロール
+                    enemyTexture = this.imageLoader.getTexture('troll');
+            }
+            
             if (enemyTexture) {
                 const battleSprite = new PIXI.Sprite(enemyTexture);
                 battleSprite.anchor.set(0.5);
-                battleSprite.scale.set(3.0); // 戦闘時は大きく表示
+                
+                // 画像サイズに基づいて適切なスケールを計算
+                const targetHeight = 80; // 戦闘画面での目標高さを小さく（120から80に）
+                const scale = targetHeight / enemyTexture.height;
+                battleSprite.scale.set(scale);
+                
+                console.log(`戦闘用敵スプライト（${this.enemyType}）: 元サイズ ${enemyTexture.width}x${enemyTexture.height}, スケール ${scale.toFixed(2)}`);
                 return battleSprite;
             }
         }
         
         // フォールバック用の戦闘スプライト
         const battleGraphics = this.createFallbackEnemySprite();
-        battleGraphics.scale.set(2.0); // 2倍サイズ
+        battleGraphics.scale.set(1.0); // フォールバックサイズも調整（2.0から1.0に）
+        console.log(`フォールバック戦闘用敵スプライトを作成しました`);
         
         return battleGraphics;
     }

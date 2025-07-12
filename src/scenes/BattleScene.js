@@ -4,6 +4,10 @@ import { BaseScene } from './SceneManager.js';
 import { PlayerIcon } from '../entities/PlayerIcon.js';
 import { EnemyIcon } from '../entities/EnemyIcon.js';
 import { ImageLoader } from '../assets/ImageLoader.js';
+import { ItemData } from '../data/ItemData.js';
+import { SpellData } from '../data/SpellData.js';
+import { PlayerInventory } from '../data/PlayerInventory.js';
+import { InventoryUI } from '../ui/InventoryUI.js';
 
 export class BattleScene extends BaseScene {
     constructor(sceneManager, transitionData = {}) {
@@ -19,17 +23,20 @@ export class BattleScene extends BaseScene {
         this.uiContainer = null;
         this.messageBox = null;
         this.actionMenu = null;
+        this.inventoryUI = null;
         
         this.battleState = 'start'; // start, playerTurn, enemyTurn, victory, defeat
         this.isAnimating = false;
         this.currentMessage = '';
         this.messageQueue = [];
         this.selectedAction = 0;
+        this.actionMenuType = 'main'; // main, items, spells
         
         // 戦闘データ
         this.playerStats = null;
         this.enemyStats = null;
         this.imageLoader = null;
+        this.playerInventory = null;
         
         // 戦闘結果
         this.battleResult = {
@@ -38,6 +45,11 @@ export class BattleScene extends BaseScene {
             expGained: 0,
             levelUp: false
         };
+
+        // アクションメニューの選択肢
+        this.mainActions = ['攻撃', '魔法', 'アイテム', '逃走'];
+        this.currentSpells = [];
+        this.currentItems = [];
     }
     
     async init() {
@@ -168,12 +180,15 @@ export class BattleScene extends BaseScene {
     }
     
     createEnemySprite() {
-        // 新しいEnemyIconクラスを使用して敵を作成
-        this.enemyIcon = new EnemyIcon(this.imageLoader, 'trool');
+        // EnemyIconクラスを使用して敵の種類に応じたスプライトを作成
+        const enemyType = this.enemy.enemyType || 'troll';
+        this.enemyIcon = new EnemyIcon(this.imageLoader, enemyType);
         this.enemySprite = this.enemyIcon.createBattleSprite();
         this.enemySprite.x = 600;
         this.enemySprite.y = 350;
         this.container.addChild(this.enemySprite);
+        
+        console.log(`戦闘画面に敵 ${enemyType} を配置しました`);
     }
     
     setupCharacterAnimations() {
@@ -250,7 +265,20 @@ export class BattleScene extends BaseScene {
     createActionMenu() {
         this.actionMenu = new PIXI.Container();
         
-        const actions = ['攻撃', '魔法', 'アイテム', '逃げる'];
+        // メインアクションメニューの背景
+        this.createMenuBackground();
+        
+        // アクション選択肢のハイライト背景
+        this.actionHighlights = [];
+        this.actionTexts = [];
+        
+        this.updateActionMenu();
+        
+        this.actionMenu.visible = false;
+        this.container.addChild(this.actionMenu);
+    }
+
+    createMenuBackground() {
         const menuBg = new PIXI.Graphics();
         menuBg.fill({ color: 0x000000, alpha: 0.9 });
         menuBg.roundRect(450, 300, 300, 200, 10);
@@ -260,11 +288,48 @@ export class BattleScene extends BaseScene {
         
         this.actionMenu.addChild(menuBg);
         
+        // 選択カーソル（より目立つように）
+        this.cursor = new PIXI.Graphics();
+        this.cursor.fill(0xffff00);
+        this.cursor.poly([0, 0, 20, 12, 0, 24]);
+        this.cursor.x = 455;
+        this.actionMenu.addChild(this.cursor);
+    }
+
+    updateActionMenu() {
+        // 既存のアクション要素をクリア
+        this.actionHighlights.forEach(highlight => highlight.destroy());
+        this.actionTexts.forEach(text => text.destroy());
+        this.actionHighlights = [];
         this.actionTexts = [];
+
+        let actions = [];
+        
+        if (this.actionMenuType === 'main') {
+            actions = this.mainActions;
+        } else if (this.actionMenuType === 'spells') {
+            const availableSpells = this.playerInventory.getSpellList();
+            actions = availableSpells.map(spell => `${spell.name} (MP${spell.mpCost})`);
+            actions.push('← 戻る');
+        } else if (this.actionMenuType === 'items') {
+            const availableItems = this.playerInventory.getItemList();
+            actions = availableItems.map(item => `${item.name} x${item.quantity}`);
+            actions.push('← 戻る');
+        }
+
         actions.forEach((action, index) => {
+            // 選択時のハイライト背景
+            const highlight = new PIXI.Graphics();
+            highlight.fill({ color: 0x4a90e2, alpha: 0.3 });
+            highlight.roundRect(470, 325 + index * 35, 260, 30, 5);
+            highlight.visible = false;
+            this.actionMenu.addChild(highlight);
+            this.actionHighlights.push(highlight);
+            
+            // アクションテキスト
             const text = new PIXI.Text(action, {
                 fontFamily: 'Courier New',
-                fontSize: 20,
+                fontSize: 18,
                 fill: 0xffffff
             });
             text.x = 480;
@@ -273,17 +338,9 @@ export class BattleScene extends BaseScene {
             this.actionMenu.addChild(text);
             this.actionTexts.push(text);
         });
-        
-        // 選択カーソル
-        this.cursor = new PIXI.Graphics();
-        this.cursor.fill(0xffff00);
-        this.cursor.poly([0, 0, 15, 10, 0, 20]);
-        this.cursor.x = 460;
+
+        // カーソル位置を更新
         this.updateCursor();
-        
-        this.actionMenu.addChild(this.cursor);
-        this.actionMenu.visible = false;
-        this.container.addChild(this.actionMenu);
     }
     
     createStatusDisplay() {
@@ -335,12 +392,14 @@ export class BattleScene extends BaseScene {
         this.playerStats = {
             name: 'プレイヤー',
             level: gameData.player.level,
-            hp: gameData.player.hp,
+            hp: Math.max(0, gameData.player.hp),
             maxHp: gameData.player.maxHp,
-            mp: gameData.player.mp,
+            mp: Math.max(0, gameData.player.mp),
             maxMp: gameData.player.maxMp,
             attack: 10 + gameData.player.level * 3,
-            defense: 5 + gameData.player.level * 2
+            defense: 5 + gameData.player.level * 2,
+            magicAttack: 8 + gameData.player.level * 2,
+            speed: 5 + gameData.player.level
         };
         
         // 敵の戦闘ステータス
@@ -350,8 +409,29 @@ export class BattleScene extends BaseScene {
             hp: 30 + this.enemy.level * 15,
             maxHp: 30 + this.enemy.level * 15,
             attack: 8 + this.enemy.level * 2,
-            defense: 3 + this.enemy.level * 1
+            defense: 3 + this.enemy.level * 1,
+            magicAttack: 6 + this.enemy.level,
+            speed: 4 + this.enemy.level,
+            statusEffects: [],
+            buffs: []
         };
+        
+        // プレイヤーのインベントリを初期化
+        this.playerInventory = new PlayerInventory();
+        
+        // デバッグ用アイテムと魔法を追加
+        this.playerInventory.addDebugItems();
+        this.playerInventory.addDebugSpells();
+        
+        // レベルに応じた魔法を習得
+        const newSpells = this.playerInventory.learnSpellsByLevel(this.playerStats.level);
+        if (newSpells.length > 0) {
+            console.log(`レベル${this.playerStats.level}で習得可能な魔法:`, newSpells.map(s => s.name));
+        }
+        
+        // インベントリUIを作成
+        this.inventoryUI = new InventoryUI(this.sceneManager, this.playerInventory);
+        this.container.addChild(this.inventoryUI.container);
         
         this.updateStatusDisplay();
     }
@@ -401,7 +481,46 @@ export class BattleScene extends BaseScene {
                 this.isAnimating = false;
                 setTimeout(() => {
                     this.processMessageQueue();
-                }, 500);
+                }, 1000);
+            }
+        };
+        
+        typeWriter();
+    }
+
+    addMessage(message) {
+        this.messageQueue.push(message);
+        if (!this.isAnimating) {
+            this.processMessageQueue();
+        }
+    }
+
+    // メッセージキューを処理
+    processMessageQueue() {
+        if (this.messageQueue.length > 0) {
+            const nextMessage = this.messageQueue.shift();
+            this.showMessage(nextMessage);
+        }
+    }
+
+    // メッセージを表示（タイプライター効果付き）
+    showMessage(message) {
+        this.isAnimating = true;
+        
+        // タイプライター効果
+        let index = 0;
+        this.messageText.text = '';
+        
+        const typeWriter = () => {
+            if (index < message.length) {
+                this.messageText.text += message[index];
+                index++;
+                setTimeout(typeWriter, 50);
+            } else {
+                this.isAnimating = false;
+                setTimeout(() => {
+                    this.processMessageQueue();
+                }, 1000);
             }
         };
         
@@ -411,14 +530,31 @@ export class BattleScene extends BaseScene {
     showActionMenu() {
         this.actionMenu.visible = true;
         this.battleState = 'selectAction';
+        this.selectedAction = 0;
+        this.updateCursor();
         
         gsap.fromTo(this.actionMenu, 
             { alpha: 0, x: this.actionMenu.x + 50 },
             { alpha: 1, x: this.actionMenu.x, duration: 0.3, ease: "back.out(1.7)" }
         );
+        
+        // カーソルの点滅アニメーション
+        this.cursorBlinkTween = gsap.to(this.cursor, {
+            alpha: 0.3,
+            duration: 0.8,
+            ease: "power2.inOut",
+            yoyo: true,
+            repeat: -1
+        });
     }
     
     hideActionMenu() {
+        // カーソルアニメーションを停止
+        if (this.cursorBlinkTween) {
+            this.cursorBlinkTween.kill();
+            this.cursor.alpha = 1; // アルファ値をリセット
+        }
+        
         gsap.to(this.actionMenu, {
             alpha: 0,
             duration: 0.2,
@@ -429,31 +565,224 @@ export class BattleScene extends BaseScene {
     }
     
     updateCursor() {
+        // カーソルの位置を更新
         this.cursor.y = 335 + this.selectedAction * 35;
         
+        // 全てのハイライトを非表示にし、テキスト色を白に戻す
+        this.actionHighlights.forEach((highlight, index) => {
+            highlight.visible = false;
+            this.actionTexts[index].style.fill = 0xffffff;
+        });
+        
+        // 選択されたアクションのハイライトを表示し、テキスト色を変更
+        if (this.actionHighlights[this.selectedAction]) {
+            this.actionHighlights[this.selectedAction].visible = true;
+            this.actionTexts[this.selectedAction].style.fill = 0xffff00; // 黄色
+        }
+        
+        // カーソルのアニメーション
         gsap.fromTo(this.cursor.scale,
             { x: 1, y: 1 },
-            { x: 1.2, y: 1.2, duration: 0.2, ease: "back.out(1.7)" }
+            { x: 1.3, y: 1.3, duration: 0.2, ease: "back.out(1.7)" }
         );
+        
+        // ハイライトのフェードインアニメーション
+        if (this.actionHighlights[this.selectedAction]) {
+            gsap.fromTo(this.actionHighlights[this.selectedAction],
+                { alpha: 0 },
+                { alpha: 0.5, duration: 0.3, ease: "power2.out" }
+            );
+        }
+        
+        // 選択音効果（将来的に音声ファイルを追加する場合のプレースホルダー）
+        console.log(`選択: ${this.actionTexts[this.selectedAction].text}`);
     }
     
     handleAction(actionIndex) {
-        this.hideActionMenu();
+        // 選択確定時の視覚効果
+        const selectedText = this.actionTexts[actionIndex];
+        const selectedHighlight = this.actionHighlights[actionIndex];
         
-        switch (actionIndex) {
-            case 0: // 攻撃
-                this.playerAttack();
-                break;
-            case 1: // 魔法
-                this.playerMagic();
-                break;
-            case 2: // アイテム
-                this.useItem();
-                break;
-            case 3: // 逃げる
-                this.tryEscape();
-                break;
+        // 選択されたアクションをフラッシュ
+        gsap.to(selectedText, {
+            alpha: 0.3,
+            duration: 0.1,
+            yoyo: true,
+            repeat: 3,
+            ease: "power2.inOut"
+        });
+        
+        // ハイライトを明るくフラッシュ
+        if (selectedHighlight) {
+            gsap.to(selectedHighlight, {
+                alpha: 1,
+                duration: 0.1,
+                yoyo: true,
+                repeat: 1,
+                ease: "power2.inOut"
+            });
         }
+        
+        // カーソルの確定アニメーション
+        gsap.to(this.cursor, {
+            scale: 1.5,
+            duration: 0.2,
+            ease: "back.out(1.7)",
+            onComplete: () => {
+                gsap.to(this.cursor, {
+                    scale: 1,
+                    duration: 0.1
+                });
+            }
+        });
+        
+        // 少し遅れてアクションを実行（フィードバック効果を見せるため）
+        setTimeout(() => {
+            // 攻撃または逃走の場合のみメニューを隠す
+            if (actionIndex === 0 || actionIndex === 3) { // 攻撃または逃走
+                this.hideActionMenu();
+            }
+            
+            switch (actionIndex) {
+                case 0: // 攻撃
+                    this.playerAttack();
+                    break;
+                case 1: // 魔法
+                    this.showSpellMenu();
+                    break;
+                case 2: // アイテム
+                    this.showItemMenu();
+                    break;
+                case 3: // 逃走
+                    this.tryEscape();
+                    break;
+            }
+        }, 150); // タイミングも短縮
+    }
+    
+    showSpellMenu() {
+        console.log('Showing spell menu');
+        this.actionMenuType = 'spells';
+        this.selectedAction = 0;
+        
+        // スペルリストを取得
+        this.currentSpells = this.playerInventory.getSpellList();
+        console.log('Available spells:', this.currentSpells);
+        
+        this.updateSpellMenu();
+        
+        // メニューが既に表示されている場合はアニメーションをスキップ
+        if (!this.actionMenu.visible) {
+            console.log('Menu not visible, showing with animation');
+            this.actionMenu.visible = true;
+            
+            gsap.fromTo(this.actionMenu, 
+                { alpha: 0, y: this.actionMenu.y + 50 },
+                { alpha: 1, y: this.actionMenu.y, duration: 0.3, ease: "back.out(1.7)" }
+            );
+        } else {
+            console.log('Menu already visible, updating content only');
+            // 既に表示されている場合は内容だけ更新
+            this.updateSpellMenu();
+        }
+    }
+    
+    updateSpellMenu() {
+        // スペルリストを取得
+        if (!this.currentSpells) {
+            this.currentSpells = this.playerInventory.getSpellList();
+        }
+        
+        console.log('Current spells in menu:', this.currentSpells);
+        
+        // スペルメニューの更新
+        this.actionHighlights.forEach((highlight, index) => {
+            highlight.visible = index === this.selectedAction;
+        });
+        
+        // カーソルの位置を更新
+        this.cursor.y = 335 + this.selectedAction * 35;
+        
+        // スペルのテキストを更新
+        this.currentSpells.forEach((spell, index) => {
+            console.log(`Spell ${index}:`, spell.name, 'MP Cost:', spell.mpCost);
+            this.actionTexts[index].text = `${spell.name} (MP: ${spell.mpCost})`;
+        });
+        
+        // 戻るオプションを追加
+        if (this.currentSpells.length < this.actionTexts.length) {
+            this.actionTexts[this.currentSpells.length].text = '戻る';
+        }
+        
+        // 不足しているスペルのテキストをクリア
+        for (let i = this.currentSpells.length + 1; i < this.actionTexts.length; i++) {
+            this.actionTexts[i].text = '';
+        }
+        
+        // アニメーション
+        gsap.fromTo(this.cursor.scale,
+            { x: 1, y: 1 },
+            { x: 1.3, y: 1.3, duration: 0.2, ease: "back.out(1.7)" }
+        );
+    }
+    
+    showItemMenu() {
+        this.actionMenuType = 'items';
+        this.selectedAction = 0;
+        
+        // アイテムリストを取得
+        this.currentItems = this.playerInventory.getItemList();
+        
+        this.updateItemMenu();
+        
+        // メニューが既に表示されている場合はアニメーションをスキップ
+        if (!this.actionMenu.visible) {
+            this.actionMenu.visible = true;
+            
+            gsap.fromTo(this.actionMenu, 
+                { alpha: 0, y: this.actionMenu.y + 50 },
+                { alpha: 1, y: this.actionMenu.y, duration: 0.3, ease: "back.out(1.7)" }
+            );
+        } else {
+            // 既に表示されている場合は内容だけ更新
+            this.updateItemMenu();
+        }
+    }
+    
+    updateItemMenu() {
+        // アイテムリストを取得
+        if (!this.currentItems) {
+            this.currentItems = this.playerInventory.getItemList();
+        }
+        
+        // アイテムメニューの更新
+        this.actionHighlights.forEach((highlight, index) => {
+            highlight.visible = index === this.selectedAction;
+        });
+        
+        // カーソルの位置を更新
+        this.cursor.y = 335 + this.selectedAction * 35;
+        
+        // アイテムのテキストを更新
+        this.currentItems.forEach((item, index) => {
+            this.actionTexts[index].text = `${item.name} x${item.quantity}`;
+        });
+        
+        // 戻るオプションを追加
+        if (this.currentItems.length < this.actionTexts.length) {
+            this.actionTexts[this.currentItems.length].text = '戻る';
+        }
+        
+        // 不足しているアイテムのテキストをクリア
+        for (let i = this.currentItems.length + 1; i < this.actionTexts.length; i++) {
+            this.actionTexts[i].text = '';
+        }
+        
+        // アニメーション
+        gsap.fromTo(this.cursor.scale,
+            { x: 1, y: 1 },
+            { x: 1.3, y: 1.3, duration: 0.2, ease: "back.out(1.7)" }
+        );
     }
     
     playerAttack() {
@@ -472,7 +801,7 @@ export class BattleScene extends BaseScene {
         });
     }
     
-    playerMagic() {
+    playerMagic(spellIndex) {
         if (this.playerStats.mp < 5) {
             this.queueMessage('MPが足りない！');
             this.battleState = 'playerTurn';
@@ -483,15 +812,17 @@ export class BattleScene extends BaseScene {
         this.battleState = 'playerMagic';
         this.playerStats.mp -= 5;
         
+        const spell = this.currentSpells[spellIndex];
+        
         // 魔法エフェクト
-        this.createMagicEffect();
+        this.createMagicEffect(spell);
         
         setTimeout(() => {
             this.calculateDamage(this.playerStats, this.enemyStats, 'magic');
         }, 1000);
     }
     
-    createMagicEffect() {
+    createMagicEffect(spell) {
         for (let i = 0; i < 10; i++) {
             const star = new PIXI.Graphics();
             star.fill(0xffff00);
@@ -514,10 +845,27 @@ export class BattleScene extends BaseScene {
         }
     }
     
-    useItem() {
-        this.queueMessage('使えるアイテムがない！');
-        this.battleState = 'playerTurn';
-        setTimeout(() => this.showActionMenu(), 1500);
+    useItem(itemIndex) {
+        const item = this.currentItems[itemIndex];
+        
+        if (item.type === 'heal') {
+            this.playerStats.hp = Math.min(this.playerStats.maxHp, this.playerStats.hp + item.value);
+            this.queueMessage(`${item.name}を使った！\nHPが${item.value}回復した。`);
+        } else if (item.type === 'mp') {
+            this.playerStats.mp = Math.min(this.playerStats.maxMp, this.playerStats.mp + item.value);
+            this.queueMessage(`${item.name}を使った！\nMPが${item.value}回復した。`);
+        }
+        
+        // アイテム使用後の処理
+        this.playerInventory.useItem(item.name);
+        this.currentItems = this.playerInventory.getItems();
+        
+        this.updateStatusDisplay();
+        
+        setTimeout(() => {
+            this.battleState = 'enemyTurn';
+            this.enemyTurn();
+        }, 1500);
     }
     
     tryEscape() {
@@ -724,25 +1072,277 @@ export class BattleScene extends BaseScene {
     }
     
     handleInput(input) {
-        this.keys = input;
+        console.log('BattleScene handleInput called', { 
+            battleState: this.battleState, 
+            isAnimating: this.isAnimating,
+            input: input
+        });
         
+        // インベントリUIが表示されている場合は、そちらに処理を委譲
+        if (this.inventoryUI && this.inventoryUI.isVisible) {
+            return this.inventoryUI.handleInput(input);
+        }
+
         if (this.battleState === 'selectAction' && !this.isAnimating) {
-            if (input['ArrowUp'] || input['KeyW']) {
-                this.selectedAction = Math.max(0, this.selectedAction - 1);
-                this.updateCursor();
+            this.handleMenuInput(input);
+        }
+    }
+
+    handleMenuInput(input) {
+        console.log('handleMenuInput called', { selectedAction: this.selectedAction, input: input });
+        
+        const maxActions = this.getMaxActionIndex();
+
+        if (input['ArrowUp'] || input['KeyW']) {
+            console.log('Up pressed');
+            this.selectedAction = Math.max(0, this.selectedAction - 1);
+            this.updateCursor();
+        }
+
+        if (input['ArrowDown'] || input['KeyS']) {
+            console.log('Down pressed');
+            this.selectedAction = Math.min(maxActions - 1, this.selectedAction + 1);
+            this.updateCursor();
+        }
+
+        if (input['Enter'] || input['Space']) {
+            console.log('Enter/Space pressed, executing action:', this.selectedAction);
+            this.executeSelectedAction();
+        }
+
+        if (input['Escape']) {
+            console.log('Escape pressed');
+            this.handleEscapeAction();
+        }
+    }
+
+    getMaxActionIndex() {
+        if (this.actionMenuType === 'main') {
+            return this.mainActions.length;
+        } else if (this.actionMenuType === 'spells') {
+            return this.playerInventory.getSpellList().length + 1; // +1 for back option
+        } else if (this.actionMenuType === 'items') {
+            return this.playerInventory.getItemList().length + 1; // +1 for back option
+        }
+        return 0;
+    }
+
+    executeSelectedAction() {
+        if (this.actionMenuType === 'main') {
+            this.handleAction(this.selectedAction);
+        } else if (this.actionMenuType === 'spells') {
+            this.handleSpellAction(this.selectedAction);
+        } else if (this.actionMenuType === 'items') {
+            this.handleItemAction(this.selectedAction);
+        }
+    }
+
+    handleMainAction(actionIndex) {
+        this.handleAction(actionIndex);
+    }
+
+    handleSpellAction(actionIndex) {
+        const spells = this.playerInventory.getSpellList();
+        
+        if (actionIndex === spells.length) {
+            // 戻るオプション
+            this.switchToMainMenu();
+            return;
+        }
+
+        if (actionIndex < spells.length) {
+            const spell = spells[actionIndex];
+            this.castSpell(spell);
+        }
+    }
+
+    handleItemAction(actionIndex) {
+        const items = this.playerInventory.getItemList();
+        
+        if (actionIndex === items.length) {
+            // 戻るオプション
+            this.switchToMainMenu();
+            return;
+        }
+
+        if (actionIndex < items.length) {
+            const item = items[actionIndex];
+            this.useItem(item);
+        }
+    }
+
+    handleEscapeAction() {
+        if (this.actionMenuType === 'main') {
+            // メインメニューでエスケープは何もしない、または逃走
+            return;
+        } else {
+            // サブメニューからメインメニューに戻る
+            this.switchToMainMenu();
+        }
+    }
+
+    switchToSpellMenu() {
+        this.actionMenuType = 'spells';
+        this.selectedAction = 0;
+        this.updateActionMenu();
+        this.showActionMenu();
+    }
+
+    switchToItemMenu() {
+        this.actionMenuType = 'items';
+        this.selectedAction = 0;
+        this.updateActionMenu();
+        this.showActionMenu();
+    }
+
+    switchToMainMenu() {
+        this.actionMenuType = 'main';
+        this.selectedAction = 0;
+        this.updateActionMenu();
+        this.updateCursor();
+    }
+
+    // 魔法を使用
+    castSpell(spell) {
+        if (!SpellData.canCastSpell(spell, this.playerStats)) {
+            this.addMessage(`MPが足りません！（必要MP: ${spell.mpCost}）`);
+            this.switchToMainMenu();
+            return;
+        }
+
+        SpellData.consumeMana(spell, this.playerStats);
+        const result = SpellData.calculateSpellEffect(spell, this.playerStats, this.enemyStats);
+
+        this.addMessage(`${this.playerStats.name}は${spell.name}を唱えた！`);
+        
+        if (result.damage) {
+            this.enemyStats.hp = Math.max(0, this.enemyStats.hp - result.damage);
+        }
+
+        if (result.healing) {
+            this.playerStats.hp = Math.min(this.playerStats.maxHp, this.playerStats.hp + result.healing);
+        }
+
+        if (result.effect) {
+            this.applyBuffOrDebuff(result.effect, result.duration, spell.target);
+        }
+
+        if (result.escape) {
+            this.battleResult.playerEscaped = true;
+            this.endBattle();
+            return;
+        }
+
+        // SpellDataからのメッセージのみを使用（重複を避ける）
+        result.messages.forEach(msg => this.addMessage(msg));
+        
+        this.updateStatusDisplay();
+        this.hideActionMenu();
+        
+        // 敵のHPが0以下になったかチェック
+        if (this.enemyStats.hp <= 0) {
+            this.victory();
+        } else {
+            this.nextTurn();
+        }
+    }
+
+    // アイテムを使用
+    useItem(item) {
+        if (!this.playerInventory.hasItem(item.id)) {
+            this.addMessage(`${item.name}を持っていません！`);
+            this.switchToMainMenu();
+            return;
+        }
+
+        this.playerInventory.useItem(item.id, 1);
+
+        if (item.type === 'attack') {
+            const result = ItemData.calculateDamageItemEffect(item, this.playerStats, this.enemyStats);
+            this.enemyStats.hp = Math.max(0, this.enemyStats.hp - result.damage);
+            result.messages.forEach(msg => this.addMessage(msg));
+        } else {
+            const results = ItemData.applyItemEffect(item, this.playerStats);
+            results.forEach(msg => this.addMessage(msg));
+        }
+
+        this.updateStatusDisplay();
+        this.hideActionMenu();
+        
+        // 敵のHPが0以下になったかチェック
+        if (this.enemyStats.hp <= 0) {
+            this.victory();
+        } else {
+            this.nextTurn();
+        }
+    }
+
+    applyBuffOrDebuff(effects, duration, target) {
+        const targetStats = target === 'enemy' ? this.enemyStats : this.playerStats;
+        
+        if (!targetStats.buffs) targetStats.buffs = [];
+        
+        targetStats.buffs.push({
+            effects: effects,
+            duration: duration
+        });
+    }
+    
+    switchToMainMenu() {
+        this.actionMenuType = 'main';
+        this.selectedAction = 0;
+        this.updateMainMenu();
+        
+        // メインメニューの表示
+        this.actionMenu.visible = true;
+        
+        gsap.fromTo(this.actionMenu, 
+            { alpha: 0, y: this.actionMenu.y + 50 },
+            { alpha: 1, y: this.actionMenu.y, duration: 0.3, ease: "back.out(1.7)" }
+        );
+    }
+
+    updateMainMenu() {
+        // メインメニューの更新
+        this.actionHighlights.forEach((highlight, index) => {
+            highlight.visible = index === this.selectedAction;
+        });
+        
+        // カーソルの位置を更新
+        this.cursor.y = 335 + this.selectedAction * 35;
+        
+        // メインメニューのテキストを設定
+        const mainActions = ['攻撃', '魔法', 'アイテム', '逃走'];
+        mainActions.forEach((action, index) => {
+            if (this.actionTexts[index]) {
+                this.actionTexts[index].text = action;
             }
-            if (input['ArrowDown'] || input['KeyS']) {
-                this.selectedAction = Math.min(3, this.selectedAction + 1);
-                this.updateCursor();
-            }
-            if (input['Enter'] || input['Space']) {
-                this.handleAction(this.selectedAction);
+        });
+        
+        // 不要なテキストをクリア
+        for (let i = mainActions.length; i < this.actionTexts.length; i++) {
+            if (this.actionTexts[i]) {
+                this.actionTexts[i].text = '';
             }
         }
+        
+        // アニメーション
+        gsap.fromTo(this.cursor.scale,
+            { x: 1, y: 1 },
+            { x: 1.3, y: 1.3, duration: 0.2, ease: "back.out(1.7)" }
+        );
     }
     
     destroy() {
         super.destroy();
         console.log('戦闘シーンが終了しました');
+    }
+
+    nextTurn() {
+        // ターンを敵に移す
+        this.battleState = 'enemyTurn';
+        setTimeout(() => {
+            this.enemyTurn();
+        }, 1000);
     }
 }

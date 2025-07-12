@@ -264,6 +264,47 @@ export class SceneManager {
         }
         return false;
     }
+    
+    // デバッグ用：敵データをリセット
+    resetEnemyData() {
+        if (this.gameData.defeatedEnemies) {
+            delete this.gameData.defeatedEnemies;
+        }
+        this.saveGame();
+        console.log('敵データをリセットしました');
+    }
+
+    // デバッグ用：ゲームデータを完全リセット
+    resetGameData() {
+        localStorage.removeItem('js-kadai-save');
+        this.gameData = {
+            player: {
+                name: 'プレイヤー',
+                level: 1,
+                hp: 50,
+                maxHp: 50,
+                mp: 20,
+                maxMp: 20,
+                exp: 0,
+                position: { x: 400, y: 300 },
+                dungeonPosition: { x: 0, y: 0, z: 0, rotation: 0 }
+            },
+            world: {
+                currentArea: 'overworld',
+                visitedAreas: ['overworld'],
+                dungeonProgress: {}
+            },
+            inventory: {
+                items: [],
+                money: 100
+            },
+            flags: {
+                firstTime: true,
+                tutorialComplete: false
+            }
+        };
+        console.log('ゲームデータを完全リセットしました');
+    }
 }
 
 // 基本シーンクラス
