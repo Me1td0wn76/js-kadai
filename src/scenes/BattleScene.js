@@ -9,6 +9,7 @@ export class BattleScene extends BaseScene {
     constructor(sceneManager, transitionData = {}) {
         super(sceneManager, transitionData);
         this.enemy = transitionData.enemy || { name: '未知の敵', level: 1 };
+        this.enemyId = transitionData.enemyId || null; // 敵の固有ID
         this.battleBackground = transitionData.battleBackground || 'field';
         this.returnScene = transitionData.returnScene || 'worldmap';
         this.returnData = transitionData.returnData || {};
@@ -29,6 +30,14 @@ export class BattleScene extends BaseScene {
         this.playerStats = null;
         this.enemyStats = null;
         this.imageLoader = null;
+        
+        // 戦闘結果
+        this.battleResult = {
+            enemyDefeated: false,
+            playerEscaped: false,
+            expGained: 0,
+            levelUp: false
+        };
     }
     
     async init() {
@@ -516,6 +525,14 @@ export class BattleScene extends BaseScene {
         
         if (Math.random() < escapeChance) {
             this.queueMessage('うまく逃げ切った！');
+            
+            // 逃走結果を記録（敵は残る）
+            this.battleResult = {
+                victory: false,
+                escaped: true,
+                enemyId: this.enemyId
+            };
+            
             setTimeout(() => {
                 this.endBattle('escape');
             }, 2000);
@@ -640,8 +657,9 @@ export class BattleScene extends BaseScene {
         
         // 経験値とレベルアップ処理
         const gameData = this.getGameData();
-        gameData.player.exp += exp;
+        gameData.player.exp = (gameData.player.exp || 0) + exp;
         
+        let leveledUp = false;
         if (gameData.player.exp >= gameData.player.level * 100) {
             gameData.player.level++;
             gameData.player.maxHp += 10;
@@ -649,11 +667,20 @@ export class BattleScene extends BaseScene {
             gameData.player.hp = gameData.player.maxHp; // レベルアップで全回復
             gameData.player.mp = gameData.player.maxMp;
             gameData.player.exp = 0;
+            leveledUp = true;
             
             this.queueMessage(`レベルアップ！レベル${gameData.player.level}になった！`);
         }
         
         this.updateGameData(gameData);
+        
+        // 戦闘結果を記録（敵の除去のため）
+        this.battleResult = {
+            victory: true,
+            enemyId: this.enemyId,
+            experienceGained: exp,
+            leveledUp: leveledUp
+        };
         
         setTimeout(() => {
             this.endBattle('victory');
@@ -687,8 +714,8 @@ export class BattleScene extends BaseScene {
             
             this.switchTo('worldmap');
         } else {
-            // 元のシーンに戻る
-            this.switchTo(this.returnScene, this.returnData);
+            // 戦闘結果をダンジョンシーンに渡して元のシーンに戻る
+            this.switchTo(this.returnScene, this.battleResult || this.returnData);
         }
     }
     

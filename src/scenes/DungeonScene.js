@@ -52,6 +52,11 @@ export class DungeonScene extends BaseScene {
         // ライティングを設定
         this.setupLighting();
         
+        // 戦闘から戻ってきた場合の処理
+        if (this.transitionData && (this.transitionData.victory || this.transitionData.escaped)) {
+            this.onReturnFromBattle(this.transitionData);
+        }
+        
         console.log(`3Dダンジョン "${this.dungeonName}" が初期化されました`);
     }
     
@@ -214,6 +219,15 @@ export class DungeonScene extends BaseScene {
         const worldX = (mazeX - this.mazeWidth / 2) * this.cellSize;
         const worldZ = (mazeY - this.mazeHeight / 2) * this.cellSize;
         
+        // 敵の固有IDを生成
+        const enemyId = `${this.dungeonName}_${mazeX}_${mazeY}`;
+        
+        // 既に倒された敵はスキップ
+        const gameData = this.getGameData();
+        if (gameData.defeatedEnemies && gameData.defeatedEnemies.includes(enemyId)) {
+            return;
+        }
+        
         // 敵の3Dモデル（簡易版）
         const enemyGeometry = new THREE.SphereGeometry(0.3, 8, 6);
         const enemyMaterial = new THREE.MeshLambertMaterial({ color: 0xff4444 });
@@ -224,8 +238,13 @@ export class DungeonScene extends BaseScene {
         // 敵データを追加
         enemy.userData = {
             type: 'enemy',
+            id: enemyId,
             name: 'ダンジョンモンスター',
             level: 1 + Math.floor(Math.random() * 3),
+            hp: 20 + Math.floor(Math.random() * 15), // 20-35 HP
+            attack: 8 + Math.floor(Math.random() * 5), // 8-12 攻撃力
+            defense: 3 + Math.floor(Math.random() * 3), // 3-5 防御力
+            exp: 15 + Math.floor(Math.random() * 10), // 15-25 経験値
             mazeX, mazeY
         };
         
@@ -522,9 +541,13 @@ export class DungeonScene extends BaseScene {
         // 戦闘シーンに切り替え
         this.switchTo('battle', {
             enemy: enemy.userData,
+            enemyId: enemy.userData.id, // 敵の固有IDを追加
             battleBackground: 'dungeon',
             returnScene: 'dungeon',
-            returnData: { dungeonName: this.dungeonName }
+            returnData: { 
+                dungeonName: this.dungeonName,
+                defeatedEnemies: this.getGameData().defeatedEnemies || []
+            }
         });
     }
     
@@ -571,6 +594,56 @@ export class DungeonScene extends BaseScene {
         
         // ワールドマップに戻る
         this.switchTo('worldmap');
+    }
+    
+    // 戦闘から戻ってきたときの処理
+    onReturnFromBattle(battleResult) {
+        if (battleResult && battleResult.victory && battleResult.enemyId) {
+            // 倒された敵をシーンから削除
+            this.removeEnemyById(battleResult.enemyId);
+            
+            // 倒された敵をゲームデータに記録
+            const gameData = this.getGameData();
+            if (!gameData.defeatedEnemies) {
+                gameData.defeatedEnemies = [];
+            }
+            if (!gameData.defeatedEnemies.includes(battleResult.enemyId)) {
+                gameData.defeatedEnemies.push(battleResult.enemyId);
+            }
+            this.updateGameData(gameData);
+            
+            console.log(`敵 ${battleResult.enemyId} を撃破しました。経験値: ${battleResult.experienceGained}`);
+            if (battleResult.leveledUp) {
+                console.log('レベルアップしました！');
+            }
+        } else if (battleResult && battleResult.escaped) {
+            console.log('戦闘から逃走しました。敵は残っています。');
+        }
+    }
+    
+    // 指定したIDの敵を削除
+    removeEnemyById(enemyId) {
+        const enemyIndex = this.enemies.findIndex(enemy => enemy.userData.id === enemyId);
+        if (enemyIndex !== -1) {
+            const enemy = this.enemies[enemyIndex];
+            
+            // 消滅エフェクト
+            gsap.to(enemy.scale, {
+                x: 0,
+                y: 0,
+                z: 0,
+                duration: 0.5,
+                ease: "back.in(1.7)",
+                onComplete: () => {
+                    this.scene.remove(enemy);
+                }
+            });
+            
+            // 配列から削除
+            this.enemies.splice(enemyIndex, 1);
+            
+            console.log(`敵 ${enemyId} がダンジョンから削除されました`);
+        }
     }
     
     destroy() {

@@ -42,18 +42,15 @@ export class MenuScene extends BaseScene {
     
     createTitle() {
         // メインタイトル
-        this.titleText = new PIXI.Text({
-            text: '境界都市トウキョウ',
-            style: {
-                fontFamily: 'Arial Black',
-                fontSize: 36,
-                fill: 0xff6b35,
-                stroke: {
-                    color: 0x000000,
-                    width: 2
-                },
-                align: 'center'
-            }
+        this.titleText = new PIXI.Text('境界都市トウキョウ', {
+            fontFamily: 'Arial Black',
+            fontSize: 36,
+            fill: 0xff6b35,
+            stroke: {
+                color: 0x000000,
+                width: 2
+            },
+            align: 'center'
         });
         
         this.titleText.anchor.set(0.5);
@@ -63,15 +60,12 @@ export class MenuScene extends BaseScene {
         this.container.addChild(this.titleText);
         
         // サブタイトル
-        this.subtitleText = new PIXI.Text({
-            text: '～分岐の刻～',
-            style: {
-                fontFamily: 'Arial',
-                fontSize: 20,
-                fill: 0xcccccc,
-                fontStyle: 'italic',
-                align: 'center'
-            }
+        this.subtitleText = new PIXI.Text('～分岐の刻～', {
+            fontFamily: 'Arial',
+            fontSize: 20,
+            fill: 0xcccccc,
+            fontStyle: 'italic',
+            align: 'center'
         });
         
         this.subtitleText.anchor.set(0.5);
@@ -92,13 +86,10 @@ export class MenuScene extends BaseScene {
         
         // メニュー項目
         this.menuOptions.forEach((option, index) => {
-            const text = new PIXI.Text({
-                text: option,
-                style: {
-                    fontFamily: 'Arial',
-                    fontSize: 20,
-                    fill: 0xffffff
-                }
+            const text = new PIXI.Text(option, {
+                fontFamily: 'Arial',
+                fontSize: 20,
+                fill: 0xffffff
             });
             
             text.anchor.set(0.5);
@@ -193,14 +184,11 @@ export class MenuScene extends BaseScene {
         this.storyContainer.removeChildren();
         
         // タイトル
-        const titleText = new PIXI.Text({
-            text: storyData.title,
-            style: {
-                fontFamily: 'Arial Bold',
-                fontSize: 28,
-                fill: 0xff6b35,
-                align: 'center'
-            }
+        const titleText = new PIXI.Text(storyData.title, {
+            fontFamily: 'Arial Bold',
+            fontSize: 28,
+            fill: 0xff6b35,
+            align: 'center'
         });
         titleText.anchor.set(0.5, 0);
         titleText.x = 400;
@@ -208,17 +196,14 @@ export class MenuScene extends BaseScene {
         this.storyContainer.addChild(titleText);
         
         // コンテンツ
-        const contentText = new PIXI.Text({
-            text: storyData.content,
-            style: {
-                fontFamily: 'Arial',
-                fontSize: 18,
-                fill: 0xffffff,
-                align: 'left',
-                wordWrap: true,
-                wordWrapWidth: 700,
-                lineHeight: 24
-            }
+        const contentText = new PIXI.Text(storyData.content, {
+            fontFamily: 'Arial',
+            fontSize: 18,
+            fill: 0xffffff,
+            align: 'left',
+            wordWrap: true,
+            wordWrapWidth: 700,
+            lineHeight: 24
         });
         contentText.anchor.set(0.5, 0);
         contentText.x = 400;
@@ -226,17 +211,17 @@ export class MenuScene extends BaseScene {
         this.storyContainer.addChild(contentText);
         
         // 進行指示
-        const nextText = new PIXI.Text({
-            text: this.currentStoryIndex < this.storyTexts.length - 1 
+        const nextText = new PIXI.Text(
+            this.currentStoryIndex < this.storyTexts.length - 1 
                 ? "Enterで次へ..." 
-                : "Enterでゲーム開始！",
-            style: {
+                : "Enterでゲーム開始！", 
+            {
                 fontFamily: 'Arial',
                 fontSize: 16,
                 fill: 0xffff00,
                 align: 'center'
             }
-        });
+        );
         nextText.anchor.set(0.5, 1);
         nextText.x = 400;
         nextText.y = 550;

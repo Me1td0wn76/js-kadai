@@ -42,6 +42,8 @@ export class SceneManager {
     
     async initPixiApp() {
         try {
+            console.log('PixiJSアプリケーション初期化開始...');
+            
             // PixiJS v8の新しいAPI使用
             this.app = new PIXI.Application();
             await this.app.init({
@@ -53,9 +55,14 @@ export class SceneManager {
                 autoDensity: true
             });
             
+            console.log('PixiJSアプリケーション初期化完了');
+            
             // キャンバスをDOMに追加
             if (this.gameContainer) {
                 this.gameContainer.appendChild(this.app.canvas);
+                console.log('キャンバスをDOMに追加しました');
+            } else {
+                console.error('ゲームコンテナが見つかりません');
             }
             
             // 入力処理を初期化
@@ -67,6 +74,7 @@ export class SceneManager {
             console.log('PixiJSアプリケーションが初期化されました');
         } catch (error) {
             console.error('PixiJSアプリケーションの初期化に失敗しました:', error);
+            throw error;
         }
     }
     
