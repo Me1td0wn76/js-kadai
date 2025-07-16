@@ -18,8 +18,8 @@ export class DungeonScene extends BaseScene {
             height: 1.6
         };
         this.maze = [];
-        this.mazeWidth = 21;
-        this.mazeHeight = 21;
+        this.mazeWidth = 11;
+        this.mazeHeight = 11;
         this.cellSize = 2;
         this.enemies = [];
         this.treasures = [];
@@ -41,18 +41,29 @@ export class DungeonScene extends BaseScene {
         // ImageLoaderを初期化
         this.imageLoader = new ImageLoader();
         await this.imageLoader.loadAllAssets();
-        // 壁・床テクスチャをThree.js用に追加読み込み
-        await this.imageLoader.loadThreeTexture('wall', '/src/images/Dungeon/texture_paper01.png');
-        await this.imageLoader.loadThreeTexture('floor', '/src/images/Dungeon/texture_concrete04.png');
+        // 壁・床テクスチャをThree.js用に追加読み込み（Dungeonフォルダから）
+        await this.imageLoader.loadThreeTexture('wall', '/src/images/Dungeon/stone_brick01.png');
+        await this.imageLoader.loadThreeTexture('floor', '/src/images/Dungeon/texture_concrete01.png');
+        await this.imageLoader.loadThreeTexture('ceiling', '/src/images/Dungeon/stone_brick04.png');
+        await this.imageLoader.loadThreeTexture('metal_wall', '/src/images/Dungeon/metal01.png');
         
         // Three.jsシーンを初期化
         this.initThreeJS();
         
+        // ライティングを設定
+        this.setupLighting();
+        
         // 迷路を生成
         this.generateMaze();
         
+        // プレイヤーの初期位置を設定
+        this.setupPlayer();
+        
         // ダンジョンの3Dモデルを作成
         this.createDungeon();
+        
+        // UIを作成
+        this.createUI();
         
         // 敵とアイテムを配置
         this.placeEnemiesAndTreasures();
@@ -128,8 +139,8 @@ export class DungeonScene extends BaseScene {
 
     // 部屋をランダムに複数配置
     addRoomsToMaze() {
-        const roomCount = 4 + Math.floor(Math.random() * 3); // 4～6部屋
-        const minSize = 3, maxSize = 5;
+        const roomCount = 2 + Math.floor(Math.random() * 2); // 2～3部屋（小さい迷路用）
+        const minSize = 2, maxSize = 3; // 部屋サイズも小さく
         const rooms = [];
         for (let i = 0; i < roomCount; i++) {
             const w = minSize + Math.floor(Math.random() * (maxSize - minSize + 1));
@@ -182,32 +193,63 @@ export class DungeonScene extends BaseScene {
     }
     
     createDungeon() {
-        // 床と壁のマテリアル
+        // 床、壁、天井のテクスチャを取得
         const floorTexture = this.imageLoader.getThreeTexture('floor');
         const wallTexture = this.imageLoader.getThreeTexture('wall');
+        const ceilingTexture = this.imageLoader.getThreeTexture('ceiling');
+        
+        // 床テクスチャの設定（タイル状に繰り返し）
+        let floorMaterial;
         if (floorTexture) {
             floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
-            floorTexture.repeat.set(this.mazeWidth, this.mazeHeight);
+            // 床全体にタイルを敷き詰める（小さい迷路用）
+            floorTexture.repeat.set(this.mazeWidth / 2, this.mazeHeight / 2);
+            floorTexture.minFilter = THREE.LinearFilter;
+            floorTexture.magFilter = THREE.LinearFilter;
+            floorMaterial = new THREE.MeshLambertMaterial({ 
+                map: floorTexture, 
+                color: 0xffffff 
+            });
         } else {
-            console.warn('床テクスチャがロードできませんでした。パスや画像を確認してください。');
+            console.warn('床テクスチャがロードできませんでした。');
+            floorMaterial = new THREE.MeshLambertMaterial({ color: 0x2196f3 });
         }
+        
+        // 壁テクスチャの設定
+        let wallMaterial;
         if (wallTexture) {
             wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
-            wallTexture.repeat.set(2, 2);
+            // 壁1面あたりのタイリング
+            wallTexture.repeat.set(1, 2); // 横1回、縦2回
+            wallTexture.minFilter = THREE.LinearFilter;
+            wallTexture.magFilter = THREE.LinearFilter;
+            wallMaterial = new THREE.MeshLambertMaterial({ 
+                map: wallTexture, 
+                color: 0xffffff 
+            });
         } else {
-            console.warn('壁テクスチャがロードできませんでした。パスや画像を確認してください。');
+            console.warn('壁テクスチャがロードできませんでした。');
+            wallMaterial = new THREE.MeshLambertMaterial({ color: 0xe53935 });
         }
-        const floorMaterial = floorTexture ?
-            new THREE.MeshLambertMaterial({ map: floorTexture, color: 0xffffff }) :
-            new THREE.MeshLambertMaterial({ color: 0x2196f3 }); // フォールバック: 青
-        const wallMaterial = wallTexture ?
-            new THREE.MeshLambertMaterial({ map: wallTexture, color: 0xffffff }) :
-            new THREE.MeshLambertMaterial({ color: 0xe53935 }); // フォールバック: 赤
-        const ceilingMaterial = new THREE.MeshLambertMaterial({ 
-            color: 0x222222 
-        });
+        
+        // 天井テクスチャの設定
+        let ceilingMaterial;
+        if (ceilingTexture) {
+            ceilingTexture.wrapS = ceilingTexture.wrapT = THREE.RepeatWrapping;
+            ceilingTexture.repeat.set(this.mazeWidth / 3, this.mazeHeight / 3);
+            ceilingTexture.minFilter = THREE.LinearFilter;
+            ceilingTexture.magFilter = THREE.LinearFilter;
+            ceilingMaterial = new THREE.MeshLambertMaterial({ 
+                map: ceilingTexture, 
+                color: 0xcccccc 
+            });
+        } else {
+            ceilingMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0x333333 
+            });
+        }
 
-        // --- 床と天井を一括で配置 ---
+        // --- 床を一括で配置 ---
         const floorGeometry = new THREE.PlaneGeometry(this.mazeWidth * this.cellSize, this.mazeHeight * this.cellSize);
         const floor = new THREE.Mesh(floorGeometry, floorMaterial);
         floor.rotation.x = -Math.PI / 2;
@@ -215,27 +257,51 @@ export class DungeonScene extends BaseScene {
         floor.receiveShadow = true;
         this.scene.add(floor);
 
+        // --- 天井を一括で配置 ---
         const ceilingGeometry = new THREE.PlaneGeometry(this.mazeWidth * this.cellSize, this.mazeHeight * this.cellSize);
         const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
         ceiling.rotation.x = Math.PI / 2;
         ceiling.position.set(0, 3, 0);
+        ceiling.receiveShadow = true;
         this.scene.add(ceiling);
-        // --- ここまで一括配置 ---
 
-        // 壁のみ個別配置
+        // --- 壁を個別配置（テクスチャタイリング付き） ---
         for (let y = 0; y < this.mazeHeight; y++) {
             for (let x = 0; x < this.mazeWidth; x++) {
                 if (this.maze[y][x] === 1) {
                     const worldX = (x - this.mazeWidth / 2) * this.cellSize;
                     const worldZ = (y - this.mazeHeight / 2) * this.cellSize;
+                    
+                    // 壁のジオメトリを作成
                     const wallGeometry = new THREE.BoxGeometry(this.cellSize, 3, this.cellSize);
+                    
+                    // 各面に個別のUVマッピングを適用
+                    this.adjustWallUVMapping(wallGeometry);
+                    
                     const wall = new THREE.Mesh(wallGeometry, wallMaterial);
                     wall.position.set(worldX, 1.5, worldZ);
                     wall.castShadow = true;
+                    wall.receiveShadow = true;
                     this.scene.add(wall);
                 }
             }
         }
+    }
+    
+    // 壁のUVマッピングを調整してタイル表示を改善
+    adjustWallUVMapping(geometry) {
+        const uvAttribute = geometry.attributes.uv;
+        
+        // 各面のUV座標を調整
+        for (let i = 0; i < uvAttribute.count; i++) {
+            const u = uvAttribute.getX(i);
+            const v = uvAttribute.getY(i);
+            
+            // UV座標をタイリングに適した値に調整
+            uvAttribute.setXY(i, u, v);
+        }
+        
+        uvAttribute.needsUpdate = true;
     }
     
     placeEnemiesAndTreasures() {
@@ -607,6 +673,25 @@ export class DungeonScene extends BaseScene {
         document.body.appendChild(uiContainer);
     }
     
+    // UIを更新する（戦闘後のステータス変更を反映）
+    updateUI() {
+        const uiContainer = document.getElementById('dungeon-ui');
+        if (uiContainer) {
+            const gameData = this.getGameData();
+            uiContainer.innerHTML = `
+                <div><strong>${this.dungeonName}</strong></div>
+                <div>レベル: ${gameData.player.level}</div>
+                <div>HP: ${gameData.player.hp}/${gameData.player.maxHp}</div>
+                <div>MP: ${gameData.player.mp}/${gameData.player.maxMp}</div>
+                <div style="margin-top: 10px; font-size: 12px;">
+                    移動: 矢印キー<br>
+                    振り向く: A/D<br>
+                    戻る: Escキー
+                </div>
+            `;
+        }
+    }
+    
     update(delta) {
         this.handleMovement();
         this.checkCollisions();
@@ -698,10 +783,11 @@ export class DungeonScene extends BaseScene {
             }
         });
         
-        // プレイヤー位置を保存
+        // プレイヤー位置を保存（HPやMPなども含む）
+        const gameData = this.getGameData();
         this.updateGameData({
             player: {
-                ...this.getGameData().player,
+                ...gameData.player,
                 dungeonPosition: { ...this.player }
             }
         });
@@ -769,6 +855,9 @@ export class DungeonScene extends BaseScene {
     encounterEnemy(enemy) {
         console.log(`敵 "${enemy.userData.name}" と遭遇！`);
         
+        // 現在のプレイヤー状態を取得
+        const gameData = this.getGameData();
+        
         // 戦闘シーンに切り替え
         this.switchTo('battle', {
             enemy: {
@@ -781,11 +870,21 @@ export class DungeonScene extends BaseScene {
                 enemyType: enemy.userData.enemyType // 敵の種類情報を追加
             },
             enemyId: enemy.userData.id, // 敵の固有IDを追加
+            playerStats: {
+                hp: gameData.player.hp,
+                mp: gameData.player.mp,
+                level: gameData.player.level,
+                exp: gameData.player.exp,
+                maxHp: gameData.player.maxHp,
+                maxMp: gameData.player.maxMp,
+                attack: gameData.player.attack,
+                defense: gameData.player.defense
+            },
             battleBackground: 'dungeon',
             returnScene: 'dungeon',
             returnData: { 
                 dungeonName: this.dungeonName,
-                defeatedEnemies: this.getGameData().defeatedEnemies || []
+                defeatedEnemies: gameData.defeatedEnemies || []
             }
         });
     }
@@ -843,10 +942,27 @@ export class DungeonScene extends BaseScene {
         const enemies = ['スケルトン', 'ゴブリン', 'スライム', '悪霊'];
         const enemyName = enemies[Math.floor(Math.random() * enemies.length)];
         
+        // 現在のプレイヤー状態を取得
+        const gameData = this.getGameData();
+        
         this.switchTo('battle', {
             enemy: {
                 name: enemyName,
-                level: 1 + Math.floor(Math.random() * 3)
+                level: 1 + Math.floor(Math.random() * 3),
+                hp: 20 + Math.floor(Math.random() * 10),
+                attack: 8 + Math.floor(Math.random() * 5),
+                defense: 3 + Math.floor(Math.random() * 3),
+                exp: 15 + Math.floor(Math.random() * 10)
+            },
+            playerStats: {
+                hp: gameData.player.hp,
+                mp: gameData.player.mp,
+                level: gameData.player.level,
+                exp: gameData.player.exp,
+                maxHp: gameData.player.maxHp,
+                maxMp: gameData.player.maxMp,
+                attack: gameData.player.attack,
+                defense: gameData.player.defense
             },
             battleBackground: 'dungeon',
             returnScene: 'dungeon',
@@ -875,13 +991,39 @@ export class DungeonScene extends BaseScene {
             if (!gameData.defeatedEnemies.includes(battleResult.enemyId)) {
                 gameData.defeatedEnemies.push(battleResult.enemyId);
             }
+            
+            // プレイヤーのステータスを戦闘結果で更新
+            if (battleResult.playerStats) {
+                gameData.player.hp = battleResult.playerStats.hp;
+                gameData.player.mp = battleResult.playerStats.mp;
+                gameData.player.level = battleResult.playerStats.level;
+                gameData.player.exp = battleResult.playerStats.exp;
+                gameData.player.maxHp = battleResult.playerStats.maxHp;
+                gameData.player.maxMp = battleResult.playerStats.maxMp;
+            }
+            
             this.updateGameData(gameData);
+            
+            // UIを更新
+            this.updateUI();
             
             console.log(`敵 ${battleResult.enemyId} を撃破しました。経験値: ${battleResult.experienceGained}`);
             if (battleResult.leveledUp) {
                 console.log('レベルアップしました！');
             }
         } else if (battleResult && battleResult.escaped) {
+            // 逃走した場合もプレイヤーのステータスを更新
+            const gameData = this.getGameData();
+            if (battleResult.playerStats) {
+                gameData.player.hp = battleResult.playerStats.hp;
+                gameData.player.mp = battleResult.playerStats.mp;
+                gameData.player.level = battleResult.playerStats.level;
+                gameData.player.exp = battleResult.playerStats.exp;
+                gameData.player.maxHp = battleResult.playerStats.maxHp;
+                gameData.player.maxMp = battleResult.playerStats.maxMp;
+                this.updateGameData(gameData);
+                this.updateUI();
+            }
             console.log('戦闘から逃走しました。敵は残っています。');
         }
     }
