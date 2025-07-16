@@ -10,6 +10,10 @@ export class ScrollDiscovery {
         this.isVisible = false;
     }
 
+    init() {
+        // 必要なら初期化処理をここに記述
+    }
+
     // スクロール発見時の演出
     async discoverScroll(location) {
         const scrollLocationData = SpellData.SCROLL_LOCATIONS[location];

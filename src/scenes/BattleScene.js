@@ -706,7 +706,9 @@ export class BattleScene extends BaseScene {
         // スペルのテキストを更新
         this.currentSpells.forEach((spell, index) => {
             console.log(`Spell ${index}:`, spell.name, 'MP Cost:', spell.mpCost);
-            this.actionTexts[index].text = `${spell.name} (MP: ${spell.mpCost})`;
+            if (this.actionTexts[index]) {
+                this.actionTexts[index].text = `${spell.name} (MP: ${spell.mpCost})`;
+            }
         });
         
         // 戻るオプションを追加
@@ -765,7 +767,9 @@ export class BattleScene extends BaseScene {
         
         // アイテムのテキストを更新
         this.currentItems.forEach((item, index) => {
-            this.actionTexts[index].text = `${item.name} x${item.quantity}`;
+            if (this.actionTexts[index]) {
+                this.actionTexts[index].text = `${item.name} x${item.quantity}`;
+            }
         });
         
         // 戻るオプションを追加

@@ -127,7 +127,8 @@ export class WorldMapScene extends BaseScene {
                 y: 500,
                 dungeonName: '古の遺跡',
                 difficulty: 1,
-                iconType: 'stairs'
+                iconType: 'stairs',
+                type: 'dungeon' // 追加
             },
             {
                 name: '溶岩洞窟',
@@ -135,7 +136,8 @@ export class WorldMapScene extends BaseScene {
                 y: 300,
                 dungeonName: '溶岩洞窟',
                 difficulty: 2,
-                iconType: 'lava'
+                iconType: 'lava',
+                type: 'dungeon' // 追加
             },
             {
                 name: '闇の神殿',
@@ -143,7 +145,8 @@ export class WorldMapScene extends BaseScene {
                 y: 600,
                 dungeonName: '闇の神殿',
                 difficulty: 3,
-                iconType: 'grave'
+                iconType: 'grave',
+                type: 'dungeon' // 追加
             },
             {
                 name: '魔法の塔',
@@ -151,7 +154,8 @@ export class WorldMapScene extends BaseScene {
                 y: 200,
                 dungeonName: '魔法の塔',
                 difficulty: 2,
-                iconType: 'house'
+                iconType: 'house',
+                type: 'dungeon' // 追加
             }
         ];
         
@@ -411,7 +415,7 @@ export class WorldMapScene extends BaseScene {
             if (distance < 40) {
                 // エリアに近づいた時の処理
                 if (this.keys['Enter'] || this.keys['Space']) {
-                    this.enterArea(area.areaData);
+                    this.enterArea(area.userData); // 修正: area.areaData → area.userData
                 }
                 
                 // 近づいた時の視覚的フィードバック

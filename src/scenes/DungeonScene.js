@@ -41,6 +41,9 @@ export class DungeonScene extends BaseScene {
         // ImageLoaderを初期化
         this.imageLoader = new ImageLoader();
         await this.imageLoader.loadAllAssets();
+        // 壁・床テクスチャをThree.js用に追加読み込み
+        await this.imageLoader.loadThreeTexture('wall', '/src/images/Dungeon/texture_paper01.png');
+        await this.imageLoader.loadThreeTexture('floor', '/src/images/Dungeon/texture_concrete04.png');
         
         // Three.jsシーンを初期化
         this.initThreeJS();
@@ -107,7 +110,6 @@ export class DungeonScene extends BaseScene {
     generateMaze() {
         // 簡単な迷路生成アルゴリズム
         this.maze = [];
-        
         // 初期化（全て壁）
         for (let y = 0; y < this.mazeHeight; y++) {
             this.maze[y] = [];
@@ -115,13 +117,41 @@ export class DungeonScene extends BaseScene {
                 this.maze[y][x] = 1; // 1 = 壁, 0 = 通路
             }
         }
-        
+        // 部屋を追加
+        this.addRoomsToMaze();
         // 再帰的な迷路生成
         this.carveMaze(1, 1);
-        
         // 出入口を作成
         this.maze[1][0] = 0; // 入口
         this.maze[this.mazeHeight - 2][this.mazeWidth - 1] = 0; // 出口
+    }
+
+    // 部屋をランダムに複数配置
+    addRoomsToMaze() {
+        const roomCount = 4 + Math.floor(Math.random() * 3); // 4～6部屋
+        const minSize = 3, maxSize = 5;
+        const rooms = [];
+        for (let i = 0; i < roomCount; i++) {
+            const w = minSize + Math.floor(Math.random() * (maxSize - minSize + 1));
+            const h = minSize + Math.floor(Math.random() * (maxSize - minSize + 1));
+            const x = 1 + Math.floor(Math.random() * (this.mazeWidth - w - 2));
+            const y = 1 + Math.floor(Math.random() * (this.mazeHeight - h - 2));
+            // 重なりチェック
+            let overlaps = false;
+            for (const r of rooms) {
+                if (x + w < r.x - 1 || x > r.x + r.w + 1 || y + h < r.y - 1 || y > r.y + r.h + 1) continue;
+                overlaps = true;
+                break;
+            }
+            if (overlaps) continue;
+            // 部屋をmazeに反映
+            for (let dy = 0; dy < h; dy++) {
+                for (let dx = 0; dx < w; dx++) {
+                    this.maze[y + dy][x + dx] = 0;
+                }
+            }
+            rooms.push({ x, y, w, h });
+        }
     }
     
     carveMaze(x, y) {
@@ -153,41 +183,51 @@ export class DungeonScene extends BaseScene {
     
     createDungeon() {
         // 床と壁のマテリアル
-        const floorMaterial = new THREE.MeshLambertMaterial({ 
-            color: 0x444444,
-            transparent: true,
-            opacity: 0.8
-        });
-        const wallMaterial = new THREE.MeshLambertMaterial({ 
-            color: 0x666666 
-        });
+        const floorTexture = this.imageLoader.getThreeTexture('floor');
+        const wallTexture = this.imageLoader.getThreeTexture('wall');
+        if (floorTexture) {
+            floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+            floorTexture.repeat.set(this.mazeWidth, this.mazeHeight);
+        } else {
+            console.warn('床テクスチャがロードできませんでした。パスや画像を確認してください。');
+        }
+        if (wallTexture) {
+            wallTexture.wrapS = wallTexture.wrapT = THREE.RepeatWrapping;
+            wallTexture.repeat.set(2, 2);
+        } else {
+            console.warn('壁テクスチャがロードできませんでした。パスや画像を確認してください。');
+        }
+        const floorMaterial = floorTexture ?
+            new THREE.MeshLambertMaterial({ map: floorTexture, color: 0xffffff }) :
+            new THREE.MeshLambertMaterial({ color: 0x2196f3 }); // フォールバック: 青
+        const wallMaterial = wallTexture ?
+            new THREE.MeshLambertMaterial({ map: wallTexture, color: 0xffffff }) :
+            new THREE.MeshLambertMaterial({ color: 0xe53935 }); // フォールバック: 赤
         const ceilingMaterial = new THREE.MeshLambertMaterial({ 
             color: 0x222222 
         });
-        
-        // 迷路に基づいて3Dモデルを作成
+
+        // --- 床と天井を一括で配置 ---
+        const floorGeometry = new THREE.PlaneGeometry(this.mazeWidth * this.cellSize, this.mazeHeight * this.cellSize);
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.set(0, 0, 0);
+        floor.receiveShadow = true;
+        this.scene.add(floor);
+
+        const ceilingGeometry = new THREE.PlaneGeometry(this.mazeWidth * this.cellSize, this.mazeHeight * this.cellSize);
+        const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+        ceiling.rotation.x = Math.PI / 2;
+        ceiling.position.set(0, 3, 0);
+        this.scene.add(ceiling);
+        // --- ここまで一括配置 ---
+
+        // 壁のみ個別配置
         for (let y = 0; y < this.mazeHeight; y++) {
             for (let x = 0; x < this.mazeWidth; x++) {
-                const worldX = (x - this.mazeWidth / 2) * this.cellSize;
-                const worldZ = (y - this.mazeHeight / 2) * this.cellSize;
-                
-                if (this.maze[y][x] === 0) {
-                    // 通路：床を作成
-                    const floorGeometry = new THREE.PlaneGeometry(this.cellSize, this.cellSize);
-                    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-                    floor.rotation.x = -Math.PI / 2;
-                    floor.position.set(worldX, 0, worldZ);
-                    floor.receiveShadow = true;
-                    this.scene.add(floor);
-                    
-                    // 天井を作成
-                    const ceilingGeometry = new THREE.PlaneGeometry(this.cellSize, this.cellSize);
-                    const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
-                    ceiling.rotation.x = Math.PI / 2;
-                    ceiling.position.set(worldX, 3, worldZ);
-                    this.scene.add(ceiling);
-                } else {
-                    // 壁を作成
+                if (this.maze[y][x] === 1) {
+                    const worldX = (x - this.mazeWidth / 2) * this.cellSize;
+                    const worldZ = (y - this.mazeHeight / 2) * this.cellSize;
                     const wallGeometry = new THREE.BoxGeometry(this.cellSize, 3, this.cellSize);
                     const wall = new THREE.Mesh(wallGeometry, wallMaterial);
                     wall.position.set(worldX, 1.5, worldZ);
@@ -509,11 +549,10 @@ export class DungeonScene extends BaseScene {
     
     setupLighting() {
         // 環境光（明るめに調整）
-        const ambientLight = new THREE.AmbientLight(0x606060, 0.6);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); // 明るい白色、強度UP
         this.scene.add(ambientLight);
-        
         // プレイヤーが持つランタン（強化）
-        const lanternLight = new THREE.SpotLight(0xffdd44, 2.0, 15, Math.PI / 4, 0.3);
+        const lanternLight = new THREE.SpotLight(0xfff8c0, 2.5, 20, Math.PI / 3, 0.2);
         lanternLight.position.set(0, 2, 0);
         lanternLight.target.position.set(0, 0, -5);
         lanternLight.castShadow = true;
@@ -521,22 +560,18 @@ export class DungeonScene extends BaseScene {
         lanternLight.shadow.mapSize.height = 2048;
         lanternLight.shadow.camera.near = 0.1;
         lanternLight.shadow.camera.far = 20;
-        
         this.camera.add(lanternLight);
         this.camera.add(lanternLight.target);
         this.scene.add(this.camera);
-        
         // 追加の周辺照明（壁面照明）
-        const wallLight1 = new THREE.DirectionalLight(0x444488, 0.3);
+        const wallLight1 = new THREE.DirectionalLight(0xffffff, 0.7);
         wallLight1.position.set(5, 5, 5);
         this.scene.add(wallLight1);
-        
-        const wallLight2 = new THREE.DirectionalLight(0x444488, 0.3);
+        const wallLight2 = new THREE.DirectionalLight(0xffffff, 0.7);
         wallLight2.position.set(-5, 5, -5);
         this.scene.add(wallLight2);
-        
         // 全体的な明度向上
-        this.renderer.toneMappingExposure = 1.2;
+        this.renderer.toneMappingExposure = 1.5;
     }
     
     createUI() {
@@ -675,15 +710,18 @@ export class DungeonScene extends BaseScene {
     rotate(newRotation) {
         this.isMoving = true;
         this.player.rotation = newRotation;
-        
-        gsap.to(this.camera.rotation, {
-            y: newRotation,
-            duration: this.moveSpeed * 0.7,
-            ease: "power2.out",
-            onComplete: () => {
-                this.isMoving = false;
-            }
-        });
+        if (this.camera && this.camera.rotation) {
+            gsap.to(this.camera.rotation, {
+                y: newRotation,
+                duration: this.moveSpeed * 0.7,
+                ease: "power2.out",
+                onComplete: () => {
+                    this.isMoving = false;
+                }
+            });
+        } else {
+            this.isMoving = false;
+        }
     }
     
     checkCollisions() {
