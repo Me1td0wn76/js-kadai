@@ -52,7 +52,7 @@ JavaScriptで作られた2D/3DハイブリッドRPGゲームです。PixiJS（2D
 ## 🚀 セットアップ
 
 ### 必要環境
-- Node.js 16.0+
+- Node.js 24.2.0+
 - npm または yarn
 - モダンブラウザ（WebGL対応）
 
