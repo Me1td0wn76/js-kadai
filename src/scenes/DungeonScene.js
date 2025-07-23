@@ -89,10 +89,14 @@ export class DungeonScene extends BaseScene {
         this.scene = new THREE.Scene();
         this.scene.fog = new THREE.Fog(0x222222, 2, 20); // より明るく、より遠くまで見える
         
-        // カメラ作成（主観視点）
+        // 固定サイズ（他のシーンと同じサイズ）
+        const canvasWidth = 800;
+        const canvasHeight = 600;
+        
+        // カメラ作成（主観視点）- 元のアスペクト比
         this.camera = new THREE.PerspectiveCamera(
             75,
-            800 / 600,
+            canvasWidth / canvasHeight,
             0.1,
             1000
         );
@@ -102,7 +106,7 @@ export class DungeonScene extends BaseScene {
             antialias: true,
             alpha: true 
         });
-        this.renderer.setSize(800, 600);
+        this.renderer.setSize(canvasWidth, canvasHeight);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.setClearColor(0x333333, 1.0); // より明るい背景色

@@ -1,4 +1,4 @@
-import './style.css'
+import './style_new.css'
 import { SceneManager } from './scenes/SceneManager.js'
 import { WorldMapScene } from './scenes/WorldMapScene.js'
 import { DungeonScene } from './scenes/DungeonScene.js'
